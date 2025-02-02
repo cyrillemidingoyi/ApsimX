@@ -1,15 +1,9 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
-
 using Models.Core;
-using APSIM.Shared.Utilities;
-using Models.Interfaces;
 
 namespace Models.Functions.SupplyFunctions
 {
     ///<summary>
-    /// # [Name]
     ///%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     ///float DLL CanopyGrossPhotosynthesis(float fPgMax, float fLUE, float fLAI,
     ///                                float fLatitude,int nDay,float fHour, float fPARdir,float fPARdif)
@@ -36,7 +30,7 @@ namespace Models.Functions.SupplyFunctions
     /// <summary>Daily growth increment of total plant biomass</summary>
     /// <returns>g dry matter/m2 soil/day</returns>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(CanopyPhotosynthesis))]
 
@@ -59,7 +53,7 @@ namespace Models.Functions.SupplyFunctions
         /// <param name="fPARdir"></param>
         /// <param name="fPARdif"></param>
         /// <returns></returns>
-        public double Value( double fPgMax, double fLUE, double fLAI,
+        public double Value(double fPgMax, double fLUE, double fLAI,
                                         double fLatitude, int nDay, double fHour, double fPARdir, double fPARdif)
         {
             int i, j;

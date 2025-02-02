@@ -1,10 +1,9 @@
-﻿namespace Models.GrazPlan
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
+using Models.Core;
+
+namespace Models.GrazPlan
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics.CodeAnalysis;
-    using System.Globalization;
-    using Models.Core;
 
     /// <summary>
     /// Livestock metabolizable energy partition
@@ -14,46 +13,46 @@
     {
         /// <summary>
         /// Gets or sets the basal maintenance requirement       
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double MaintBase { get; set; }
 
         /// <summary>
         /// Gets or sets the E(graze) + E(move)                  
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double MaintMoveGraze { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the E(cold)         
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double MaintCold { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the ME(c)           
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double Conceptus { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the ME(l) 
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double Lactation { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the ME(w) = NE(w) / k(w)           
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double Fleece { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the ME(g)      
-        /// MJ
         /// </summary>
+        [Units("MJ")]
         public double Gain { get; set; }
-    } 
+    }
 
     /// <summary>
     /// Supplement eaten type
@@ -64,11 +63,13 @@
         /// <summary>
         /// Gets or sets the paddock name
         /// </summary>
+        [Units("-")]
         public string Paddock { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the supplement eaten in kg
         /// </summary>
+        [Units("kg")]
         public double Eaten { get; set; }
     }
 
@@ -81,26 +82,31 @@
         /// <summary>
         /// Gets or sets the dry matter pool weight in kg/d
         /// </summary>
+        [Units("kg/d")]
         public double Weight { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the dry matter pool N amount kg/d
         /// </summary>
+        [Units("kg/d")]
         public double N { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the dry matter pool P amount kg/d
         /// </summary>
+        [Units("kg/d")]
         public double P { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the dry matter pool S amount mol/d
         /// </summary>
+        [Units("kg/d")]
         public double S { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the dry matter pool AshAlk amount mol/d
         /// </summary>
+        [Units("mol/d")]
         public double AshAlk { get; set; }
     }
 
@@ -113,19 +119,22 @@
         /// <summary>
         /// Gets or sets the N amount in kg/d
         /// </summary>
+        [Units("kg/d")]
         public double N { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the P amount in kg/d
         /// </summary>
+        [Units("kg/d")]
         public double P { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the S amount in mol/d
         /// </summary>
+        [Units("mol/d")]
         public double S { get; set; }
     }
-    
+
     /// <summary>
     /// Definitions of many property constants in the Stock component
     /// </summary>
@@ -180,6 +189,7 @@
         public const int prpRDP_EFFECT = 40;
         public const int prpPADD_RANK = 41;
         public const int prpINTAKE_MOD = 42;
+        public const int prpBASE_EMPTY_WT = 43;
 #pragma warning restore 1591 //missing xml comment
     }
 
@@ -207,12 +217,12 @@
             /// Female animals
             /// </summary>
             eFemale,
-            
+
             /// <summary>
             /// Male animals
             /// </summary>
             eMale,
-            
+
             /// <summary>
             /// Deaths of non suckling animals
             /// </summary>
@@ -249,7 +259,8 @@
             {
                 total = 0;
 
-                for (idx = 1; idx <= model.Count(); idx++)
+                int n = model == null ? 0 : model.Count();
+                for (idx = 1; idx <= n; idx++)
                     if (!useTag || (model.Animals[idx].Tag == p))
                     {
                         if (!useYoung)
@@ -325,7 +336,8 @@
                 total = 0.0;
                 denom = 0;
 
-                for (idx = 1; idx <= model.Count(); idx++)
+                int count = model == null ? 0 : model.Count();
+                for (idx = 1; idx <= count; idx++)
                 {
                     if (!useTag || (model.Animals[idx].Tag == passIdx))
                     {
@@ -342,49 +354,71 @@
                             int s = (int)GrazType.TOMElement.s;
                             switch (varCode)
                             {
-                                case StockProps.prpAGE: value = animalGroup.AgeDays;
+                                case StockProps.prpAGE:
+                                    value = animalGroup.AgeDays;
                                     break;
-                                case StockProps.prpAGE_MONTHS: value = animalGroup.AgeDays / MONTH2DAY;
+                                case StockProps.prpAGE_MONTHS:
+                                    value = animalGroup.AgeDays / MONTH2DAY;
                                     break;
-                                case StockProps.prpLIVE_WT: value = animalGroup.LiveWeight;
+                                case StockProps.prpLIVE_WT:
+                                    value = animalGroup.LiveWeight;
                                     break;
-                                case StockProps.prpBASE_WT: value = animalGroup.BaseWeight;
+                                case StockProps.prpBASE_WT:
+                                    value = animalGroup.BaseWeight;
                                     break;
-                                case StockProps.prpCOND_SCORE: value = animalGroup.ConditionScore(StockUtilities.Cond_System.csSYSTEM1_5);
+                                case StockProps.prpCOND_SCORE:
+                                    value = animalGroup.ConditionScore(StockUtilities.Cond_System.csSYSTEM1_5);
                                     break;
-                                case StockProps.prpMAX_PREV_WT: value = animalGroup.MaxPrevWeight;
+                                case StockProps.prpMAX_PREV_WT:
+                                    value = animalGroup.MaxPrevWeight;
                                     break;
-                                case StockProps.prpFLEECE_WT: value = animalGroup.FleeceCutWeight;
+                                case StockProps.prpFLEECE_WT:
+                                    value = animalGroup.FleeceCutWeight;
                                     break;
-                                case StockProps.prpCFLEECE_WT: value = animalGroup.CleanFleeceWeight;
+                                case StockProps.prpCFLEECE_WT:
+                                    value = animalGroup.CleanFleeceWeight;
                                     break;
-                                case StockProps.prpFIBRE_DIAM: value = animalGroup.FibreDiam;
+                                case StockProps.prpFIBRE_DIAM:
+                                    value = animalGroup.FibreDiam;
                                     break;
-                                case StockProps.prpPREGNANT: value = animalGroup.Pregnancy;
+                                case StockProps.prpPREGNANT:
+                                    value = animalGroup.Pregnancy;
                                     break;
-                                case StockProps.prpLACTATING: value = animalGroup.Lactation;
+                                case StockProps.prpLACTATING:
+                                    value = animalGroup.Lactation;
                                     break;
-                                case StockProps.prpNO_FOETUSES: value = animalGroup.NoFoetuses;
+                                case StockProps.prpNO_FOETUSES:
+                                    value = animalGroup.NoFoetuses;
                                     break;
-                                case StockProps.prpNO_SUCKLING: value = animalGroup.NoOffspring;
+                                case StockProps.prpNO_SUCKLING:
+                                    value = animalGroup.NoOffspring;
                                     break;
-                                case StockProps.prpBIRTH_CS: value = animalGroup.BirthCondition;
+                                case StockProps.prpBIRTH_CS:
+                                    value = animalGroup.BirthCondition;
                                     break;
-                                case StockProps.prpDSE: value = animalGroup.DrySheepEquivs;
+                                case StockProps.prpDSE:
+                                    value = animalGroup.DrySheepEquivs;
                                     break;
-                                case StockProps.prpWT_CHANGE: value = animalGroup.WeightChange;
+                                case StockProps.prpWT_CHANGE:
+                                    value = animalGroup.WeightChange;
                                     break;
-                                case StockProps.prpME_INTAKE: value = animalGroup.AnimalState.ME_Intake.Total;
+                                case StockProps.prpME_INTAKE:
+                                    value = animalGroup.AnimalState.ME_Intake.Total;
                                     break;
-                                case StockProps.prpCPI_INTAKE: value = animalGroup.AnimalState.CP_Intake.Total;
+                                case StockProps.prpCPI_INTAKE:
+                                    value = animalGroup.AnimalState.CP_Intake.Total;
                                     break;
-                                case StockProps.prpCFLEECE_GROWTH: value = animalGroup.CleanFleeceGrowth;
+                                case StockProps.prpCFLEECE_GROWTH:
+                                    value = animalGroup.CleanFleeceGrowth;
                                     break;
-                                case StockProps.prpDAY_FIBRE_DIAM: value = animalGroup.DayFibreDiam;
+                                case StockProps.prpDAY_FIBRE_DIAM:
+                                    value = animalGroup.DayFibreDiam;
                                     break;
-                                case StockProps.prpMILK_WT: value = animalGroup.MilkYield;
+                                case StockProps.prpMILK_WT:
+                                    value = animalGroup.MilkYield;
                                     break;
-                                case StockProps.prpMILK_ME: value = animalGroup.MilkEnergy;
+                                case StockProps.prpMILK_ME:
+                                    value = animalGroup.MilkEnergy;
                                     break;
                                 case StockProps.prpRETAINED_N:
                                     value = (animalGroup.AnimalState.CP_Intake.Total / GrazType.N2Protein) - (animalGroup.AnimalState.InOrgFaeces.Nu[n] + animalGroup.AnimalState.OrgFaeces.Nu[n] + animalGroup.AnimalState.Urine.Nu[n]);
@@ -395,24 +429,35 @@
                                 case StockProps.prpRETAINED_S:
                                     value = animalGroup.AnimalState.Sulf_Intake.Total - (animalGroup.AnimalState.InOrgFaeces.Nu[s] + animalGroup.AnimalState.OrgFaeces.Nu[s] + animalGroup.AnimalState.Urine.Nu[s]);
                                     break;
-                                case StockProps.prpURINE_N: value = animalGroup.AnimalState.Urine.Nu[n];
+                                case StockProps.prpURINE_N:
+                                    value = animalGroup.AnimalState.Urine.Nu[n];
                                     break;
-                                case StockProps.prpURINE_P: value = animalGroup.AnimalState.Urine.Nu[p];
+                                case StockProps.prpURINE_P:
+                                    value = animalGroup.AnimalState.Urine.Nu[p];
                                     break;
-                                case StockProps.prpURINE_S: value = animalGroup.AnimalState.Urine.Nu[s];
+                                case StockProps.prpURINE_S:
+                                    value = animalGroup.AnimalState.Urine.Nu[s];
                                     break;
                                 case StockProps.prpCH4_OUTPUT:
                                     value = 0.001 * animalGroup.MethaneWeight;         // Convert g/d to kg/d                  
                                     break;
-                                case StockProps.prpRDPI: value = animalGroup.AnimalState.RDP_Intake;
+                                case StockProps.prpRDPI:
+                                    value = animalGroup.AnimalState.RDP_Intake;
                                     break;
-                                case StockProps.prpRDPR: value = animalGroup.AnimalState.RDP_Reqd;
+                                case StockProps.prpRDPR:
+                                    value = animalGroup.AnimalState.RDP_Reqd;
                                     break;
-                                case StockProps.prpRDP_EFFECT: value = animalGroup.AnimalState.RDP_IntakeEffect;
+                                case StockProps.prpRDP_EFFECT:
+                                    value = animalGroup.AnimalState.RDP_IntakeEffect;
                                     break;
-                                case StockProps.prpINTAKE_MOD: value = animalGroup.IntakeModifier;
+                                case StockProps.prpINTAKE_MOD:
+                                    value = animalGroup.IntakeModifier;
                                     break;
-                                default: result = false;
+                                case StockProps.prpBASE_EMPTY_WT:
+                                    value = animalGroup.EmptyBodyWeight;
+                                    break;
+                                default:
+                                    result = false;
                                     break;
                             }
                         }
@@ -496,7 +541,8 @@
                 GrazType.ZeroDMPool(ref totalPool);
                 denom = 0;
 
-                for (idx = 1; idx <= model.Count(); idx++)
+                int count = model == null ? 0 : model.Count();
+                for (idx = 1; idx <= count; idx++)
                 {
                     if (!useTag || (model.Animals[idx].Tag == passIdx))
                     {
@@ -595,7 +641,7 @@
                 if (model.Paddocks[paddIdx].SuppRemovalKG > 0.0)
                     count++;
             }
-            
+
             suppValues = new SupplementEaten[count];
             idx = 0;
             for (paddIdx = 0; paddIdx <= model.Paddocks.Count - 1; paddIdx++)
@@ -631,7 +677,7 @@
                 energyValues[idx].MaintCold = group.AnimalState.EnergyUse.Cold;
                 energyValues[idx].Conceptus = group.AnimalState.EnergyUse.Preg;
                 energyValues[idx].Lactation = group.AnimalState.EnergyUse.Lact;
-                energyValues[idx].Fleece  = group.AnimalState.EnergyUse.Wool / group.AnimalState.Efficiency.Gain;
+                energyValues[idx].Fleece = group.AnimalState.EnergyUse.Wool / group.AnimalState.Efficiency.Gain;
                 energyValues[idx].Gain = group.AnimalState.EnergyUse.Gain / group.AnimalState.Efficiency.Gain;
             }
         }

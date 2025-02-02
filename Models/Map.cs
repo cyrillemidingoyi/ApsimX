@@ -1,58 +1,30 @@
 ﻿using System;
-using System.Text;
-using Models.Core;
-using Newtonsoft.Json;
-using System.Xml;
 using System.Collections.Generic;
-using APSIM.Shared.Utilities;
+using System.Linq;
 using Models.Climate;
+using Models.Core;
+using Models.Mapping;
 
 namespace Models
 {
     /// <summary>
-    /// # [Name]
-    /// [DocumentView]
+    /// This component shows a map in the UI.
     /// </summary>
     [Serializable]
     [ViewName("UserInterface.Views.MapView")]
     [PresenterName("UserInterface.Presenters.MapPresenter")]
     [ValidParent(DropAnywhere = true)]
-    public class Map : Model, AutoDocumentation.ITag
+    public class Map : Model
     {
-        /// <summary>
-        /// Class for representing a latitude and longitude.
-        /// </summary>
-        [Serializable]
-        public class Coordinate
-        {
-            /// <summary>The latitude</summary>
-            [Description("Latitude")]
-            public double Latitude { get; set; }
-
-            /// <summary>The longitude</summary>
-            [Description("Longitude")]
-            public double Longitude { get; set; }
-
-            /// <summary>
-            /// Convenience constructor.
-            /// </summary>
-            /// <param name="latitude">Latitude.</param>
-            /// <param name="longitude">Longitude.</param>
-            public Coordinate(double latitude, double longitude)
-            {
-                Latitude = latitude;
-                Longitude = longitude;
-            }
-        }
-
         /// <summary>List of coordinates to show on map</summary>
         public List<Coordinate> GetCoordinates(List<string> names = null)
         {
             List<Coordinate> coordinates = new List<Coordinate>();
             if (names != null)
                 names.Clear();
+            else names = new List<string>();
 
-            foreach (Weather weather in this.FindAllInScope<Weather>())
+            foreach (Weather weather in FindAllInScope<Weather>().Where(w => w.Enabled))
             {
                 weather.OpenDataFile();
                 double latitude = weather.Latitude;
@@ -69,7 +41,7 @@ namespace Models
 
             if (coordinates.Count == 0)
             {
-                foreach (var soil in this.FindAllInScope<Models.Soils.Soil>())
+                foreach (var soil in FindAllInScope<Soils.Soil>())
                 {
                     double latitude = soil.Latitude;
                     double longitude = soil.Longitude;
@@ -121,6 +93,6 @@ namespace Models
         /// <summary>
         /// Zoom level
         /// </summary>
-        private Double _Zoom = 360;
+        private Double _Zoom = 1.0;
     }
 }

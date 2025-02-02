@@ -1,10 +1,8 @@
-﻿using Models.Core;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Text;
+﻿using Models.CLEM.Interfaces;
+using Models.Core;
 using Newtonsoft.Json;
+using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace Models.CLEM.Resources
 {
@@ -75,12 +73,35 @@ namespace Models.CLEM.Resources
         public double Growth { get; set; }
 
         /// <summary>
+        /// Name of component
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
         /// pricing
         /// </summary>
         public ResourcePricing Price(PurchaseOrSalePricingStyleType priceStyle)
         {
             return null;
         }
+
+
+        /// <summary>
+        /// Total value of resource
+        /// </summary>
+        public double? Value
+        {
+            get
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Get the amount of the last gain in this resource 
+        /// </summary>
+        [JsonIgnore]
+        public double LastGain { get; set; }
 
         /// <summary>
         /// Reset timestep stores
@@ -93,13 +114,24 @@ namespace Models.CLEM.Resources
         }
 
         /// <summary>
+        /// 
+        /// </summary>
+        public void Initialise()
+        {
+            throw new NotImplementedException();
+        }
+
+        #region transactions
+
+        /// <summary>
         /// Add to Resource method.
         /// This style is not supported in GrazeFoodStoreType
         /// </summary>
         /// <param name="resourceAmount">Object to add. This object can be double or contain additional information (e.g. Nitrogen) of food being added</param>
         /// <param name="activity">Name of activity adding resource</param>
-        /// <param name="reason">Name of individual adding resource</param>
-        public void Add(object resourceAmount, CLEMModel activity, string reason)
+        /// <param name="relatesToResource"></param>
+        /// <param name="category"></param>
+        public void Add(object resourceAmount, CLEMModel activity, string relatesToResource, string category)
         {
             throw new NotImplementedException();
         }
@@ -156,15 +188,9 @@ namespace Models.CLEM.Resources
         /// <param name="newAmount"></param>
         public void Set(double newAmount)
         {
-            this.amount = Math.Max(0,newAmount);
+            this.amount = Math.Max(0, newAmount);
         }
+        #endregion
 
-        /// <summary>
-        /// 
-        /// </summary>
-        public void Initialise()
-        {
-            throw new NotImplementedException();
-        }
     }
 }

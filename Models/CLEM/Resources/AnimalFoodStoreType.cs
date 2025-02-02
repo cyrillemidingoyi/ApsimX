@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Newtonsoft.Json;
+﻿using Models.CLEM.Interfaces;
 using Models.Core;
-using System.ComponentModel.DataAnnotations;
 using Models.Core.Attributes;
+using Newtonsoft.Json;
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.IO;
 
 namespace Models.CLEM.Resources
 {
@@ -14,13 +13,13 @@ namespace Models.CLEM.Resources
     /// This stores the initialisation parameters for a fodder type.
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(AnimalFoodStore))]
-    [Description("This resource represents an animal food store (e.g. Lucerne).")]
+    [Description("This resource represents an animal food store (e.g. lucerne)")]
     [Version(1, 0, 1, "")]
     [HelpUri(@"Content/Features/Resources/AnimalFoodStore/AnimalFoodStoreType.htm")]
-    public class AnimalFoodStoreType : CLEMResourceTypeBase, IResourceWithTransactionType, IFeedType, IResourceType
+    public class AnimalFoodStoreType : CLEMResourceTypeBase, IFeedType, IResourceType
     {
         /// <summary>
         /// Unit type
@@ -70,6 +69,17 @@ namespace Models.CLEM.Resources
             Units = "kg";
         }
 
+        /// <summary>
+        /// Total value of resource
+        /// </summary>
+        public double? Value
+        {
+            get
+            {
+                return Price(PurchaseOrSalePricingStyleType.Sale)?.CalculateValue(Amount);
+            }
+        }
+
         /// <summary>An event handler to allow us to initialise ourselves.</summary>
         /// <param name="sender">The sender.</param>
         /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
@@ -78,9 +88,7 @@ namespace Models.CLEM.Resources
         {
             this.amount = 0;
             if (StartingAmount > 0)
-            {
-                Add(StartingAmount, this, "Starting value");
-            }
+                Add(StartingAmount, null, null, "Starting value");
         }
 
         #region Transactions
@@ -90,40 +98,35 @@ namespace Models.CLEM.Resources
         /// </summary>
         /// <param name="resourceAmount">Object to add. This object can be double or contain additional information (e.g. Nitrogen) of food being added</param>
         /// <param name="activity">Name of activity adding resource</param>
-        /// <param name="reason">Name of individual adding resource</param>
-        public new void Add(object resourceAmount, CLEMModel activity, string reason)
+        /// <param name="relatesToResource"></param>
+        /// <param name="category"></param>
+        public new void Add(object resourceAmount, CLEMModel activity, string relatesToResource, string category)
         {
-            double addAmount;
+            double amountAdded;
             double nAdded;
             switch (resourceAmount.GetType().ToString())
             {
                 case "System.Double":
-                    addAmount = (double)resourceAmount;
+                    amountAdded = (double)resourceAmount;
                     nAdded = Nitrogen;
                     break;
                 case "Models.CLEM.Resources.FoodResourcePacket":
-                    addAmount = ((FoodResourcePacket)resourceAmount).Amount;
+                    amountAdded = ((FoodResourcePacket)resourceAmount).Amount;
                     nAdded = ((FoodResourcePacket)resourceAmount).PercentN;
                     break;
                 default:
                     throw new Exception(String.Format("ResourceAmount object of type {0} is not supported Add method in {1}", resourceAmount.GetType().ToString(), this.Name));
             }
 
-            // update N based on new input added
-            CurrentStoreNitrogen = ((CurrentStoreNitrogen*Amount) + (nAdded * addAmount)) / (Amount + addAmount);
-
-            this.amount += addAmount;
-
-            ResourceTransaction details = new ResourceTransaction
+            if (amountAdded > 0)
             {
-                Gain = addAmount,
-                Activity = activity,
-                Reason = reason,
-                ResourceType = this
-            };
-            LastTransaction = details;
-            TransactionEventArgs te = new TransactionEventArgs() { Transaction = details };
-            OnTransactionOccurred(te);
+                // update N based on new input added
+                CurrentStoreNitrogen = ((CurrentStoreNitrogen * Amount) + (nAdded * amountAdded)) / (Amount + amountAdded);
+
+                this.amount += amountAdded;
+
+                ReportTransaction(TransactionType.Gain, amountAdded, activity, relatesToResource, category, this);
+            }
         }
 
         /// <summary>
@@ -133,47 +136,38 @@ namespace Models.CLEM.Resources
         public new void Remove(ResourceRequest request)
         {
             if (request.Required == 0)
-            {
                 return;
-            }
 
             // if this request aims to trade with a market see if we need to set up details for the first time
             if (request.MarketTransactionMultiplier > 0)
-            {
                 FindEquivalentMarketStore();
-            }
 
             double amountRemoved = request.Required;
             // avoid taking too much
             amountRemoved = Math.Min(this.amount, amountRemoved);
-            this.amount -= amountRemoved;
 
-            FoodResourcePacket additionalDetails = new FoodResourcePacket
+            if (amountRemoved > 0)
             {
-                DMD = this.DMD,
-                PercentN = this.CurrentStoreNitrogen
-            };
-            request.AdditionalDetails = additionalDetails;
+                this.amount -= amountRemoved;
 
-            request.Provided = amountRemoved;
+                FoodResourcePacket additionalDetails = new FoodResourcePacket
+                {
+                    DMD = this.DMD,
+                    PercentN = this.CurrentStoreNitrogen
+                };
+                request.AdditionalDetails = additionalDetails;
 
-            // send to market if needed
-            if (request.MarketTransactionMultiplier > 0 && EquivalentMarketStore != null)
-            {
-                additionalDetails.Amount = amountRemoved * request.MarketTransactionMultiplier;
-                (EquivalentMarketStore as AnimalFoodStoreType).Add(additionalDetails, request.ActivityModel, "Farm sales");
+                request.Provided = amountRemoved;
+
+                // send to market if needed
+                if (request.MarketTransactionMultiplier > 0 && EquivalentMarketStore != null)
+                {
+                    additionalDetails.Amount = amountRemoved * request.MarketTransactionMultiplier;
+                    (EquivalentMarketStore as AnimalFoodStoreType).Add(additionalDetails, request.ActivityModel, request.ResourceTypeName, "Farm sales");
+                }
+
+                ReportTransaction(TransactionType.Loss, amountRemoved, request.ActivityModel, request.RelatesToResource, request.Category, this);
             }
-
-            ResourceTransaction details = new ResourceTransaction
-            {
-                ResourceType = this,
-                Loss = amountRemoved,
-                Activity = request.ActivityModel,
-                Reason = request.Reason
-            };
-            LastTransaction = details;
-            TransactionEventArgs te = new TransactionEventArgs() { Transaction = details };
-            OnTransactionOccurred(te);
             return;
         }
 
@@ -186,64 +180,39 @@ namespace Models.CLEM.Resources
             this.amount = newValue;
         }
 
-        /// <summary>
-        /// Back account transaction occured
-        /// </summary>
-        public event EventHandler TransactionOccurred;
-
-        /// <summary>
-        /// Transcation occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected virtual void OnTransactionOccurred(EventArgs e)
-        {
-            TransactionOccurred?.Invoke(this, e);
-        }
-
-        /// <summary>
-        /// Last transaction received
-        /// </summary>
-        [JsonIgnore]
-        public ResourceTransaction LastTransaction { get; set; }
-
         #endregion
 
-        /// <summary>
-        /// Provides the description of the model settings for summary (GetFullSummary)
-        /// </summary>
-        /// <param name="formatForParentControl">Use full verbose description</param>
-        /// <returns></returns>
-        public override string ModelSummary(bool formatForParentControl)
+        #region descriptive summary
+
+        /// <inheritdoc/>
+        public override string ModelSummary()
         {
-            string html = "";
-            html += "<div class=\"activityentry\">";
-            html += "This food has a nitrogen content of <span class=\"setvalue\">" + this.Nitrogen.ToString("0.###")+"%</span>";
-            if(DMD > 0)
+            using (StringWriter htmlWriter = new StringWriter())
             {
-                html += " and a Dry Matter Digesibility of <span class=\"setvalue\">" + this.DMD.ToString("0.###") + "%</span>";
+                htmlWriter.Write("<div class=\"activityentry\">");
+                htmlWriter.Write("This food has a nitrogen content of <span class=\"setvalue\">" + this.Nitrogen.ToString("0.###") + "%</span>");
+                if (DMD > 0)
+                    htmlWriter.Write(" and a Dry Matter Digesibility of <span class=\"setvalue\">" + this.DMD.ToString("0.###") + "%</span>");
+                else
+                    htmlWriter.Write(" and a Dry Matter Digesibility estimated from N%");
+
+                htmlWriter.Write("</div>");
+                if (StartingAmount > 0)
+                {
+                    htmlWriter.Write("<div class=\"activityentry\">");
+                    htmlWriter.Write("Simulation starts with <span class=\"setvalue\">" + this.StartingAmount.ToString("#,##0.##") + "</span> kg");
+                    htmlWriter.Write("</div>");
+                }
+                return htmlWriter.ToString();
             }
-            else
-            {
-                html += " and a Dry Matter Digesibility estimated from N%";
-            }
-            html += "</div>";
-            if (StartingAmount > 0)
-            {
-                html += "<div class=\"activityentry\">";
-                html += "Simulation starts with <span class=\"setvalue\">" + this.StartingAmount.ToString("#,##0.##") + "</span> kg";
-                html += "</div>";
-            }
-            return html;
         }
 
-        /// <summary>
-        /// Provides the closing html tags for object
-        /// </summary>
-        /// <returns></returns>
-        public override string ModelSummaryInnerOpeningTags(bool formatForParentControl)
+        /// <inheritdoc/>
+        public override string ModelSummaryInnerOpeningTags()
         {
             return "";
         }
+        #endregion
 
     }
 }

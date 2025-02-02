@@ -22,6 +22,16 @@
             File.Delete(outFileName);
 
             string[] filesToMerge = DirectoryUtilities.FindFiles(fileSpec, recurse);
+            MergeFiles(filesToMerge, outFileName);
+        }
+
+        /// <summary>
+        /// Merge multiple .db files into a single .db file.
+        /// </summary>
+        /// <param name="filesToMerge">The .db files to be merged.</param>
+        /// <param name="outFileName">The name of the new output file.</param>
+        public static void MergeFiles(string[] filesToMerge, string outFileName)
+        {
             if (filesToMerge.Length > 1)
             {
                 File.Copy(filesToMerge[0], outFileName, overwrite:true);
@@ -65,38 +75,41 @@
         public static void Merge(IDatabaseConnection source, SQLite destination)
         {
             destination.BeginTransaction();
-
-            if (source.GetTableNames().Contains("_Simulations"))
-            {
-                var sourceData = source.ExecuteQuery("SELECT * FROM _Simulations");
-                var destinationData = destination.ExecuteQuery("SELECT * FROM _Simulations");
-                var simulationNameIDMapping = destinationData
-                                                  .AsEnumerable()
-                                                  .ToDictionary(row => row.Field<string>(1),
-                                                                row => row.Field<int>(0));
-
-                var oldIDNewIDMapping = new Dictionary<int, int>();
-                var columnNames = DataTableUtilities.GetColumnNames(destinationData).ToList();
-                foreach (DataRow simulationRow in sourceData.Rows)
+            try {
+                if (source.GetTableNames().Contains("_Simulations"))
                 {
-                    string name = simulationRow["Name"].ToString();
-                    if (!simulationNameIDMapping.TryGetValue(name, out int id))
+                    var sourceData = source.ExecuteQuery("SELECT * FROM _Simulations");
+                    var destinationData = destination.ExecuteQuery("SELECT * FROM _Simulations");
+                    var simulationNameIDMapping = destinationData
+                                                      .AsEnumerable()
+                                                      .ToDictionary(row => row.Field<string>(1),
+                                                                    row => row.Field<int>(0));
+
+                    var oldIDNewIDMapping = new Dictionary<int, int>();
+                    var columnNames = DataTableUtilities.GetColumnNames(destinationData).ToList();
+                    foreach (DataRow simulationRow in sourceData.Rows)
                     {
-                        // Add a new row to destination.
-                        var newID = simulationNameIDMapping.Values.Max() + 1;
-                        simulationNameIDMapping.Add(name, newID);
-                        var oldID = Convert.ToInt32(simulationRow["ID"]);
-                        oldIDNewIDMapping.Add(oldID, newID);
-                        simulationRow["ID"] = newID;
-                        destination.InsertRows("_Simulations", columnNames, new List<object[]>() { simulationRow.ItemArray });
+                        string name = simulationRow["Name"].ToString();
+                        if (!simulationNameIDMapping.TryGetValue(name, out int id))
+                        {
+                            // Add a new row to destination.
+                            var newID = simulationNameIDMapping.Values.Max() + 1;
+                            simulationNameIDMapping.Add(name, newID);
+                            var oldID = Convert.ToInt32(simulationRow["ID"]);
+                            oldIDNewIDMapping.Add(oldID, newID);
+                            simulationRow["ID"] = newID;
+                            destination.InsertRows("_Simulations", columnNames, new List<object[]>() { simulationRow.ItemArray });
+                        }
                     }
+
+                    foreach (var tableName in source.GetTableNames().Where(t => t != "_Simulations" && t != "_Checkpoints"))
+                        MergeTable(source, destination, tableName, oldIDNewIDMapping);
                 }
-
-                foreach (var tableName in source.GetTableNames().Where(t => t != "_Simulations" && t != "_Checkpoints"))
-                    MergeTable(source, destination, tableName, oldIDNewIDMapping);
             }
-
-            destination.EndTransaction();
+            finally
+            {
+                destination.EndTransaction();
+            }
         }
 
         /// <summary>

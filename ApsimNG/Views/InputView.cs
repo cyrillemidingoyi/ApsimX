@@ -4,41 +4,24 @@ using UserInterface.Interfaces;
 
 namespace UserInterface.Views
 {
-    interface IInputView
-    {
-        /// <summary>
-        /// Invoked when a browse button is clicked.
-        /// </summary>
-        event EventHandler BrowseButtonClicked;
 
-        /// <summary>
-        /// Property to provide access to the filename label.
-        /// </summary>
-        string FileName { get; set; }
-
-        /// <summary>
-        /// Property to provide access to the grid.
-        /// </summary>
-        IGridView GridView { get; }
-    }
-
-    public class InputView : ViewBase, IInputView
+    public class InputView : ViewBase
     {
         /// <summary>
         /// Invoked when a browse button is clicked.
         /// </summary>
         public event EventHandler BrowseButtonClicked;
 
-        private VBox vbox1 = null;
+        private Box vbox1 = null;
         private Button button1 = null;
         private Label label1 = null;
-        private Label label2 = null;
-        private GridView grid;
+
+        private ContainerView grid;
 
         /// <summary>
         /// Property to provide access to the grid.
         /// </summary>
-        public IGridView GridView { get { return grid; } }
+        public ContainerView Grid { get { return grid; } }
 
         /// <summary>
         /// Constructor
@@ -46,16 +29,14 @@ namespace UserInterface.Views
         public InputView(ViewBase owner) : base(owner)
         {
             Builder builder = BuilderFromResource("ApsimNG.Resources.Glade.InputView.glade");
-            vbox1 = (VBox)builder.GetObject("vbox1");
+            vbox1 = (Box)builder.GetObject("vbox1");
             button1 = (Button)builder.GetObject("button1");
             label1 = (Label)builder.GetObject("label1");
-            label2 = (Label)builder.GetObject("label2");
             mainWidget = vbox1;
 
-            grid = new GridView(this);
+            grid = new ContainerView(owner);
             vbox1.PackStart(grid.MainWidget, true, true, 0);
             button1.Clicked += OnBrowseButtonClick;
-            label2.ModifyFg(StateType.Normal, new Gdk.Color(0xFF, 0x0, 0x0));
             mainWidget.Destroyed += _mainWidget_Destroyed;
         }
 
@@ -64,7 +45,7 @@ namespace UserInterface.Views
             try
             {
                 button1.Clicked -= OnBrowseButtonClick;
-                grid.MainWidget.Destroy();
+                grid.Dispose();
                 grid = null;
                 mainWidget.Destroyed -= _mainWidget_Destroyed;
                 owner = null;
@@ -92,22 +73,6 @@ namespace UserInterface.Views
         }
 
         /// <summary>
-        /// Property to provide access to the warning text label.
-        /// </summary>
-        public string WarningText
-        {
-            get
-            {
-                return label2.Text;
-            }
-            set
-            {
-                label2.Text = value;
-                label2.Visible = !string.IsNullOrWhiteSpace(value);
-            }
-        }
-
-        /// <summary>
         /// Browse button was clicked - send event to presenter.
         /// </summary>
         private void OnBrowseButtonClick(object sender, EventArgs e)
@@ -124,13 +89,5 @@ namespace UserInterface.Views
                 ShowError(err);
             }
         }
-    }
-
-    /// <summary>
-    /// A class for holding info about a begin drag event.
-    /// </summary>
-    public class OpenDialogArgs : EventArgs
-    {
-        public string FileName;
     }
 }

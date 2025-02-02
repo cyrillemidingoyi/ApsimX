@@ -15,6 +15,8 @@
 
         public double AirPressure { get; set; }
 
+        public double DiffuseFraction { get; set; }
+
         public DateTime EndDate { get; set; }
 
         public double Latitude { get; set; }
@@ -26,6 +28,8 @@
         public double MinT { get; set; }
 
         public double MeanT { get; set; }
+
+        public double PanEvap { get; set; }
 
         public double Radn { get; set; }
 

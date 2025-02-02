@@ -1,14 +1,17 @@
 ﻿using System;
 using Models.Core;
-using Models.PMF.Phen;
 using Models.Functions;
+using Models.PMF.Phen;
 
 namespace Models.PMF.Struct
 {
-    /// <summary> # [Name]
-    /// Sets the number of buds on each mains stem to the valud of it child on the [SetStage] </summary>
+    /// <summary> 
+    /// Each time the specified event occurs, bud number on each main-stem is set to:
+    /// 
+    /// *FractionOfBudBurst* * *BudNumber*
+    /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Structure))]
     public class BudNumberFunction : Model

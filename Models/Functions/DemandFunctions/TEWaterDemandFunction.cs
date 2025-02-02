@@ -1,14 +1,11 @@
 ﻿using System;
+using APSIM.Shared.Utilities;
 using Models.Core;
 using Models.Interfaces;
-using APSIM.Shared.Utilities;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Water demand is calculated using the Transpiration Efficiency (TE) approach (ie TE=Coefficient/VDP).
-    /// </summary>
+    /// <summary>Water demand is calculated using the Transpiration Efficiency (TE) approach (ie TE=Coefficient/VDP).</summary>
     [Serializable]
     public class TEWaterDemandFunction : Model, IFunction
     {
@@ -43,7 +40,6 @@ namespace Models.Functions.DemandFunctions
         {
             return Photosynthesis.Value(arrayIndex) / (TranspirationEfficiencyCoefficient.Value(arrayIndex) / VPD / 0.001);
         }
-
     }
 }
 

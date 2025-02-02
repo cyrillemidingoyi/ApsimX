@@ -1,20 +1,21 @@
-﻿using APSIM.Shared.Utilities;
+﻿using System;
+using APSIM.Shared.Utilities;
 using Models.Core;
 using Models.Functions;
-using Models.PMF.Struct;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using Newtonsoft.Json;
 
 namespace Models.PMF.Phen
 {
-    /// <summary>The duration of this phase is determined by leaf appearance rate and the number of leaves to complete the phase. As such, the model parameterisation of leaf appearance and final leaf number are important for predicting the duration of the crop correctly.</summary>
+    /// <summary>
+    /// This phase goes from the specified start stage to the specified end stage and
+    /// its duration is determined by leaf appearance rate and the number of leaves to
+    /// complete the phase. 
+    /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
-    public class SimpleLeafAppearancePhase : Model, IPhase, ICustomDocumentation
+    public class SimpleLeafAppearancePhase : Model, IPhase
     {
 
         [Link(Type = LinkType.Child, ByName = true)]
@@ -36,6 +37,10 @@ namespace Models.PMF.Phen
         [Models.Core.Description("End")]
         public string End { get; set; }
 
+        /// <summary>Is the phase emerged from the ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
+
         /// <summary>Return a fraction of phase complete.</summary>
         [JsonIgnore]
         public double FractionComplete
@@ -44,7 +49,7 @@ namespace Models.PMF.Phen
             {
                 double F = 0;
                 F = (currentLeafNumber.Value() - LeafNoAtStart) / TargetLeafForCompletion;
-                F = MathUtilities.Bound(F,0,1);
+                F = MathUtilities.Bound(F, 0, 1);
                 return Math.Max(F, FractionCompleteYesterday); //Set to maximum of FractionCompleteYesterday so on days where final leaf number increases phenological stage is not wound back.
             }
         }
@@ -53,7 +58,7 @@ namespace Models.PMF.Phen
         public bool DoTimeStep(ref double propOfDayToUse)
         {
             bool proceedToNextPhase = false;
-                        
+
             if (First)
             {
                 LeafNoAtStart = currentLeafNumber.Value();
@@ -63,15 +68,15 @@ namespace Models.PMF.Phen
 
             FractionCompleteYesterday = FractionComplete;
 
-            if (FractionComplete>=1)
+            if (FractionComplete >= 1)
             {
                 proceedToNextPhase = true;
                 propOfDayToUse = 0.00001;  //assumes we use most of the Tt today to get to final leaf.  Should be calculated as a function of the phyllochron
             }
-            
+
             return proceedToNextPhase;
         }
-                
+
         /// <summary>Reset phase</summary>
         public void ResetPhase()
         {
@@ -80,35 +85,15 @@ namespace Models.PMF.Phen
             TargetLeafForCompletion = 0;
             First = true;
         }
-        
+
         //7. Private methode
         //-----------------------------------------------------------------------------------------------------------------
 
         /// <summary>Called when [simulation commencing].</summary>
         [EventSubscribe("Commencing")]
-        private void OnSimulationCommencing(object sender, EventArgs e) { ResetPhase(); }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
+        private void OnSimulationCommencing(object sender, EventArgs e)
         {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name + " Phase", headingLevel));
-
-                // Describe the start and end stages
-                tags.Add(new AutoDocumentation.Paragraph("This phase goes from " + Start + " to " + End + ".  ", indent));
-
-                // get description of this class.
-                AutoDocumentation.DocumentModelSummary(this, tags, headingLevel, indent, false);
-
-                // write memos.
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, headingLevel + 1, indent);
-            }
+            ResetPhase();
         }
     }
 }
-
-      
-      

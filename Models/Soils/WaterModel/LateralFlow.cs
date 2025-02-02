@@ -1,10 +1,11 @@
-﻿namespace Models.WaterModel
+﻿using System;
+using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Soils;
+using Newtonsoft.Json;
+
+namespace Models.WaterModel
 {
-    using APSIM.Shared.Utilities;
-    using Core;
-    using System;
-    using Newtonsoft.Json;
-    using Models.Soils;
 
     /// <summary>
     /// Lateral movement of water is calculated from a user specified lateral inflow ('InFlow'). 
@@ -12,22 +13,20 @@
     /// Lateral Outflow is the flow that occurs as a result of the soil water going above DUL and the soil being on a slope. So if there is no slope and the water goes above DUL there is no lateral outflow. KLAT is just the lateral resistance of the soil to this flow. It is a soil water conductivity.
     ///
     /// The calculation of lateral outflow on a layer basis is now performed using the equation: 
-    /// Lateral flow for a layer = KLAT * d * s / (1 + s<sup>2</sup>)<sup>0.5</sup> * L / A * unit conversions.
+    /// Lateral flow for a layer = KLAT * d * s / (1 + s^2^)^0.5^ * L / A * unit conversions.
     /// Where: 
     ///     KLAT = lateral conductivity (mm/day)
     ///     d = depth of saturation in the layer(mm) = Thickness * (SW - DUL) / (SAT - DUL) if SW > DUL.
     ///     (Note this allows lateral flow in any "saturated" layer, not just those inside a water table.)
     ///     s = slope(m / m)
     ///     L = catchment discharge width. Basically, it's the width of the downslope boundary of the catchment. (m)
-    ///     A = catchment area. (m<sup>2</sup>)
+    ///     A = catchment area. (m^2^)
     /// 
     /// NB. with Lateral Inflow it is assumed that ALL the water goes straight into the layer. 
     /// Irrespective of the layers ability to hold it. It is like an irrigation. 
     /// KLAT has no effect and does not alter the amount of water coming into the layer. 
     /// KLAT only alters the amount of water flowing out of the layer
     /// </summary>
-    [ViewName("UserInterface.Views.ProfileView")]
-    [PresenterName("UserInterface.Presenters.ProfilePresenter")]
     [ValidParent(ParentType = typeof(WaterBalance))]
     [Serializable]
     public class LateralFlowModel : Model
@@ -39,9 +38,9 @@
         /// <summary> The field. </summary>
         [Link]
         private Zone field = null;
-        
+
         /// <summary>Access the soil physical properties.</summary>
-        [Link] 
+        [Link]
         private IPhysical soilPhysical = null;
 
         /// <summary>The amount of incoming water (mm)</summary>

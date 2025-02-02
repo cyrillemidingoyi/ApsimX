@@ -1,18 +1,16 @@
 // An APSIMInputFile is either a ".met" file or a ".out" file.
 // They are both text files that share the same format. 
 // These classes are used to read/write these files and create an object instance of them.
-
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Data;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 
 namespace APSIM.Shared.Utilities
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Collections.Specialized;
-    using System.Data;
-    using System.Globalization;
-    using System.IO;
-    using System.Linq;
-
     /// <summary>
     /// A simple type for encapsulating a constant
     /// </summary>
@@ -45,6 +43,33 @@ namespace APSIM.Shared.Utilities
 
         /// <summary>The comment</summary>
         public string Comment;
+    }
+
+    /// <summary>
+    /// A simple type for encapsulating a text entry
+    /// </summary>
+    [Serializable]
+    public class ApsimPositionCacheEntry
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ApsimConstant"/> class.
+        /// </summary>
+        /// <param name="date">The datetime of this entry.</param>
+        /// <param name="pos">The file position of this entry.</param>
+        public ApsimPositionCacheEntry(DateTime date, long pos)
+        {
+            Date = date;
+            Position = pos;
+        }
+
+        /// <summary>The datetime of the line</summary>
+        public DateTime Date;
+
+        /// <summary>The value of the line</summary>
+        public string Value;
+
+        /// <summary>The position of the line in the file</summary>
+        public long Position;
     }
 
     /// <summary>
@@ -91,7 +116,11 @@ namespace APSIM.Shared.Utilities
         private DateTime _LastDate;
 
         /// <summary>The first line position</summary>
-        private int FirstLinePosition;
+        private long FirstLinePosition;
+
+        /// <summary>A cache of lines that have been read to. Stores the date, position and value of the line
+        /// Stored in date order for faster searching.</summary>
+        private LinkedList<ApsimPositionCacheEntry> positionCache = new LinkedList<ApsimPositionCacheEntry>();
 
         /// <summary>The words</summary>
         private StringCollection Words = new StringCollection();
@@ -314,7 +343,7 @@ namespace APSIM.Shared.Utilities
 
             if (IsExcelFile == true)
             {
-                data = ToTableFromExcel(addConsts);
+                data = ToTableFromExcel();
             }
             else
             {
@@ -379,17 +408,29 @@ namespace APSIM.Shared.Utilities
         /// Convert this file to a DataTable.
         /// </summary>
         /// <returns></returns>
-        public DataTable ToTableFromExcel(List<string> addConsts = null)
+        public DataTable ToTableFromExcel()
         {
             System.Data.DataTable data = new System.Data.DataTable();
 
             if (_excelData.Rows.Count != 0)
             {
-                data = _excelData;
+                data = _excelData.Copy();
             }
             //will I ever hit this without having any data???
 
-            return data;
+            if (data != null)
+            {
+                //the excel to table function will not set the column caption
+                //so we do it here manually, otherwise it's just called 'column1' etc
+                for (int i = 0; i < data.Columns.Count; i++)
+                {
+                    data.Columns[i].Caption = data.Columns[i].ColumnName;
+                }
+                return data;
+            } else
+            {
+                throw new Exception("Error converting excel data to table");
+            }
         }
 
 
@@ -486,7 +527,8 @@ namespace APSIM.Shared.Utilities
                 }
                 else
                 {
-                    Headings = StringUtilities.SplitStringHonouringQuotes(HeadingLines[0], " \t");
+                    Headings = new StringCollection();
+                    Headings.AddRange(StringUtilities.SplitStringHonouringQuotes(HeadingLines[0], " \t").ToArray());
                     Units = new StringCollection();
                     Units.AddRange(StringUtilities.SplitStringHonouringBrackets(HeadingLines[1], " \t", '(', ')'));
                 }
@@ -518,25 +560,8 @@ namespace APSIM.Shared.Utilities
                 // the correct format and make it explicit.
                 if (Types[w] == typeof(DateTime) && (Units[w] == "" || Units[w] == "()"))
                 {
-                    // First try our traditional default format
-                    DateTime dtValue;
-                    if (DateTime.TryParseExact(words[w], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dtValue))
-                    {
-                        Units[w] = "(yyyy-MM-dd)";
-                    }
-                    else
-                    {
-                        // We know something in the current culture works. Step through the patterns until we find it.
-                        string[] dateFormats = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetAllDateTimePatterns();
-                        foreach (string dateFormat in dateFormats)
-                        {
-                            if (DateTime.TryParseExact(words[w], dateFormat, System.Globalization.CultureInfo.CurrentCulture, System.Globalization.DateTimeStyles.None, out dtValue))
-                            {
-                                Units[w] = "(" + dateFormat + ")";
-                                break;
-                            }
-                        }
-                    }
+                    words[w] = DateUtilities.ValidateDateStringWithYear(words[w]);
+                    Units[w] = "(yyyy-MM-dd)";
                 }
 
             }
@@ -562,17 +587,7 @@ namespace APSIM.Shared.Utilities
 
                     else if (columnTypes[w] == typeof(DateTime))
                     {
-                        // Need to get a sanitised date e.g. d/M/yyyy 
-                        string DateFormat = Units[w].ToLower();
-                        DateFormat = StringUtilities.SplitOffBracketedValue(ref DateFormat, '(', ')');
-                        DateFormat = DateFormat.Replace("mmm", "MMM");
-                        DateFormat = DateFormat.Replace("mm", "m");
-                        DateFormat = DateFormat.Replace("dd", "d");
-                        DateFormat = DateFormat.Replace("m", "M");
-                        if (DateFormat == "")
-                            DateFormat = "yyyy-MM-dd";
-                        DateTime Value = DateTime.ParseExact(words[w], DateFormat, CultureInfo.InvariantCulture);
-                        values[w] = Value;
+                        values[w] = DateUtilities.GetDate(words[w]);
                     }
                     else if (columnTypes[w] == typeof(float))
                     {
@@ -607,7 +622,7 @@ namespace APSIM.Shared.Utilities
 
             string Line = inData.ReadLine();
 
-            if (Line == null || Line.Length == 0)
+            if (string.IsNullOrWhiteSpace(Line))
                 return false;
 
             if (Line.IndexOf("!") > 0) //used to ignore "!" in a row
@@ -619,8 +634,11 @@ namespace APSIM.Shared.Utilities
                 //Line = Line.TrimEnd(',');
                 words.AddRange(Line.Split(",".ToCharArray()));
             }
-            else
-                words = StringUtilities.SplitStringHonouringQuotes(Line, " \t");
+            else {
+                words = new StringCollection();
+                words.AddRange(StringUtilities.SplitStringHonouringQuotes(Line, " \t").ToArray());
+            }
+                
 
             if (words.Count != Headings.Count)
                 throw new Exception("Invalid number of values on line: " + Line + "\r\nin file: " + _FileName);
@@ -643,7 +661,7 @@ namespace APSIM.Shared.Utilities
             if (inData.EndOfStream)
                 return "?";
 
-            int Pos = inData.Position;
+            long Pos = inData.Position;
 
             StringCollection Words = new StringCollection();
             while (GetNextLine(inData, ref Words) && (Words[w] == "?" || Words[w] == "*")) ;
@@ -673,9 +691,9 @@ namespace APSIM.Shared.Utilities
                     if (ColumnName.Equals("date", StringComparison.CurrentCultureIgnoreCase))
                     {
                         if (ColumnTypes[Col] == typeof(DateTime))
-                            return (DateTime)values[Col];
-                        else
-                            return DateTime.Parse(values[Col].ToString(), CultureInfo.InvariantCulture);
+                            return DateUtilities.GetDate(DateUtilities.GetDateAsString((DateTime)values[Col]));
+                        else if (ColumnTypes[Col] == typeof(string))
+                            return DateUtilities.GetDate(values[Col].ToString());
                     }
                     else if (ColumnName.Equals("year", StringComparison.CurrentCultureIgnoreCase))
                         Year = Convert.ToInt32(values[Col], CultureInfo.InvariantCulture);
@@ -721,12 +739,7 @@ namespace APSIM.Shared.Utilities
             {
                 string ColumnName = table.Columns[col].ColumnName;
                 if (ColumnName.Equals("date", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    if (ColumnTypes[col] == typeof(DateTime))
-                        return (DateTime)table.Rows[rowIndex][col];
-                    else
-                        return DateTime.Parse(table.Rows[rowIndex][col].ToString(), CultureInfo.InvariantCulture);
-                }
+                    DateUtilities.GetDate(table.Rows[rowIndex][col].ToString());
                 else if (ColumnName.Equals("year", StringComparison.CurrentCultureIgnoreCase))
                     Year = Convert.ToInt32(table.Rows[rowIndex][col], CultureInfo.InvariantCulture);
                 else if (ColumnName.Equals("month", StringComparison.CurrentCultureIgnoreCase))
@@ -758,31 +771,78 @@ namespace APSIM.Shared.Utilities
         public void SeekToDate(DateTime date)
         {
             if (date < _FirstDate)
-                throw new Exception("Date " + date.ToString() + " doesn't exist in file: " + _FileName);
+                throw new Exception("Date " + DateUtilities.GetDateAsString(date) + " doesn't exist in file: " + _FileName);
 
+            //check if we've looked at this date before
+            ApsimPositionCacheEntry previousEntry = null; //used as a starting point to save searching from the start of the file if entries exist
+            foreach (ApsimPositionCacheEntry entry in this.positionCache)
+            {
+                if (entry.Date.Equals(date))
+                {
+                    if (IsExcelFile)
+                        excelIndex = (int)entry.Position;
+                    else
+                        SeekToPosition(entry.Position);
+                    return;
+                }
+                else if (entry.Date < date)
+                {
+                    //cache is stored in reverse order, so stop looking after the date is past
+                    previousEntry = entry;
+                    break;
+                }
+            }
+
+            long newPosition = 0;
+            //did not find date in cache, start looking from closest entry found
             if (IsExcelFile)
             {
+                int startingIndex = 0;
+                if (previousEntry != null)
+                    startingIndex = (int)previousEntry.Position;
+
                 // Iterate through the DataTable, using excelIndex as the counter.
                 // If we reach a row whose date is greater than or equal to the
                 // desired date, break out of the loop.
-                for (excelIndex = 0; excelIndex < _excelData.Rows.Count; excelIndex++)
+                for (excelIndex = startingIndex; excelIndex < _excelData.Rows.Count; excelIndex++)
                 {
                     DateTime rowDate = GetDateFromValues(_excelData.Rows[excelIndex].ItemArray);
                     if (rowDate >= date)
                         break;
                 }
+                newPosition = excelIndex;
             }
             else
             {
-                int NumRowsToSkip = (date - _FirstDate).Days;
+                //calculate how many rows we need to read through to each the given date
+                //one day per row is written in the file
+                int NumRowsToSkip = 0;
+                if (previousEntry != null)
+                {
+                    NumRowsToSkip = (date - previousEntry.Date).Days;
+                    SeekToPosition(previousEntry.Position);
+                }
+                else
+                {
+                    NumRowsToSkip = (date - _FirstDate).Days;
+                    SeekToPosition(FirstLinePosition);
+                }
 
-                inStreamReader.Seek(FirstLinePosition, SeekOrigin.Begin);
+                //read the file until we reach the correct line
                 while (!inStreamReader.EndOfStream && NumRowsToSkip > 0)
                 {
                     inStreamReader.ReadLine();
                     NumRowsToSkip--;
                 }
+                newPosition = GetCurrentPosition();
             }
+
+            //now that we are in the position, insert our entry at this point in the list
+            ApsimPositionCacheEntry newEntry = new ApsimPositionCacheEntry(date, newPosition);
+            if (previousEntry != null)
+                this.positionCache.AddBefore(this.positionCache.Find(previousEntry), newEntry);
+            else
+                this.positionCache.AddFirst(newEntry);
         }
 
         /// <summary>
@@ -809,15 +869,21 @@ namespace APSIM.Shared.Utilities
         }
 
         /// <summary>Return the current file position</summary>
-        public int GetCurrentPosition()
+        public long GetCurrentPosition()
         {
-            return inStreamReader.Position;
+            if (IsExcelFile)
+                return excelIndex;
+            else
+                return inStreamReader.Position;
         }
 
         /// <summary>Seek to the specified file position</summary>
-        public void SeekToPosition(int position)
+        public void SeekToPosition(long position)
         {
-            inStreamReader.Seek(position, SeekOrigin.Begin);
+            if (IsExcelFile)
+                excelIndex = Convert.ToInt32(position);
+            else
+                inStreamReader.Seek(position, SeekOrigin.Begin);
         }
 
 
@@ -903,6 +969,10 @@ namespace APSIM.Shared.Utilities
                             value = coltext1.Substring(posEquals + 1).Trim();
                             if (name != "Title")
                                 unit = StringUtilities.SplitOffBracketedValue(ref value, '(', ')');
+
+                            //Replace , notation with . in case they are inputting data from another region
+                            value = value.Replace(",", ".");
+
                             _Constants.Add(new ApsimConstant(name, value, unit, comment));
                         }
                         resultDt.Rows[rowCount].Delete();
@@ -928,6 +998,10 @@ namespace APSIM.Shared.Utilities
                             comment = StringUtilities.SplitOffAfterDelimiter(ref coltext3, "!");
                             comment.Trim();
                         }
+
+                        //Replace , notation with . in case they are inputting data from another region
+                        value = value.Replace(",", ".");
+
                         _Constants.Add(new ApsimConstant(name, value, unit, comment));
                         resultDt.Rows[rowCount].Delete();
                     }

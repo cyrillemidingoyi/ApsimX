@@ -1,37 +1,43 @@
 ﻿using Models.Core;
-using Models.CLEM.Groupings;
 using Models.CLEM.Resources;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Models.Core.Attributes;
+using DocumentFormat.OpenXml.Drawing.Charts;
+using SixLabors.ImageSharp;
+using Models.CLEM.Interfaces;
+using Models.PMF.Organs;
+using System.Collections.Generic;
+using Models.LifeCycle;
+using System.IO;
 
 namespace Models.CLEM.Activities
 {
     /// <summary>Other animals breed activity</summary>
     /// <summary>This activity handles breeding in other animals types</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(CLEMActivityBase))]
     [ValidParent(ParentType = typeof(ActivitiesHolder))]
     [ValidParent(ParentType = typeof(ActivityFolder))]
-    [Description("This activity manages the breeding of a specified type of other animal.")]
+    [Description("Manages the breeding of a specified type of other animal")]
     [Version(1, 0, 1, "")]
     [HelpUri(@"Content/Features/Activities/OtherAnimals/OtherAnimalsActivityBreed.htm")]
-    public class OtherAnimalsActivityBreed : CLEMActivityBase
+    public class OtherAnimalsActivityBreed : CLEMActivityBase, IHandlesActivityCompanionModels
     {
+        private int malebreeders = 0;
+        private int breeders = 0;
+
         /// <summary>
         /// name of other animal type
         /// </summary>
         [Description("Other animal type")]
         [Required(AllowEmptyStrings = false, ErrorMessage = "Name of other animal type required")]
-        [Models.Core.Display(Type = DisplayType.CLEMResource, CLEMResourceGroups = new Type[] { typeof(OtherAnimals) })]
-        public string AnimalType { get; set; }
+        [Core.Display(Type = DisplayType.DropDown, Values = "GetResourcesAvailableByName", ValuesArgs = new object[] { new object[] { typeof(OtherAnimals) } })]
+        public string AnimalTypeName { get; set; }
 
         /// <summary>
         /// Offspring per female breeder
@@ -39,13 +45,6 @@ namespace Models.CLEM.Activities
         [Description("Offspring per female breeder")]
         [Required, GreaterThanValue(0)]
         public double OffspringPerBreeder { get; set; }
-
-        /// <summary>
-        /// Cost per female breeder
-        /// </summary>
-        [Description("Cost per female breeder")]
-        [Required, GreaterThanEqualValue(0)]
-        public int CostPerBreeder { get; set; }
 
         /// <summary>
         /// Breeding female age
@@ -64,10 +63,11 @@ namespace Models.CLEM.Activities
         /// <summary>
         /// The Other animal type this group points to
         /// </summary>
+        [JsonIgnore]
         public OtherAnimalsType SelectedOtherAnimalsType;
 
         /// <summary>
-        /// Month this overhead is next due.
+        /// Month this timer is next due.
         /// </summary>
         [JsonIgnore]
         public DateTime NextDueDate { get; set; }
@@ -77,7 +77,7 @@ namespace Models.CLEM.Activities
         /// </summary>
         public OtherAnimalsActivityBreed()
         {
-            this.SetDefaults();
+            AllocationStyle = ResourceAllocationStyle.Manual;
         }
 
         /// <summary>An event handler to allow us to initialise ourselves.</summary>
@@ -87,137 +87,182 @@ namespace Models.CLEM.Activities
         private void OnCLEMInitialiseActivity(object sender, EventArgs e)
         {
             // get other animal type model
-            SelectedOtherAnimalsType = Resources.GetResourceItem(this, AnimalType, OnMissingResourceActionTypes.Ignore, OnMissingResourceActionTypes.Ignore) as OtherAnimalsType;
+            SelectedOtherAnimalsType = Resources.FindResourceType<OtherAnimals, OtherAnimalsType>(this, AnimalTypeName, OnMissingResourceActionTypes.Ignore, OnMissingResourceActionTypes.Ignore);
         }
 
-        /// <summary>An event handler to perform herd breeding </summary>
-        /// <param name="sender">The sender.</param>
-        /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
+        /// <inheritdoc/>
+        public override LabelsForCompanionModels DefineCompanionModelLabels(string type)
+        {
+            switch (type)
+            {
+                case "LabourRequirement":
+                case "ActivityFee":
+                    return new LabelsForCompanionModels(
+                        identifiers: new List<string>() {
+                            "Number to breed"
+                        },
+                        measures: new List<string>() {
+                            "fixed",
+                            "per head"
+                        }
+                        );
+                default:
+                    return new LabelsForCompanionModels();
+            }
+        }
+
+
+        /// <inheritdoc/>
+        public override void PrepareForTimestep()
+        {
+            IEnumerable<OtherAnimalsTypeCohort> cohorts = SelectedOtherAnimalsType.GetCohorts(null, false).ToList();
+            malebreeders = cohorts.Where(a => a.Age >= this.BreedingAge && a.Sex == Sex.Male).Sum(b => b.Number);
+            breeders = 0;
+            if (!UseLocalMales | malebreeders > 0)
+            {
+                breeders = cohorts.Where(a => a.Age >= this.BreedingAge && a.Sex == Sex.Female).Sum(b => b.Number);
+            }
+        }
+
+        /// <inheritdoc/>
+        public override List<ResourceRequest> RequestResourcesForTimestep(double argument = 0)
+        {
+            Status = ActivityStatus.NotNeeded;
+            foreach (var valueToSupply in valuesForCompanionModels)
+            {
+                switch (valueToSupply.Key.type)
+                {
+                    case "OtherAnimalsGroup":
+                        valuesForCompanionModels[valueToSupply.Key] = breeders;
+                        break;
+                    case "LabourRequirement":
+                    case "ActivityFee":
+                        switch (valueToSupply.Key.identifier)
+                        {
+                            case "Number to buy":
+                                switch (valueToSupply.Key.unit)
+                                {
+                                    case "fixed":
+                                        valuesForCompanionModels[valueToSupply.Key] = 1;
+                                        break;
+                                    case "per head":
+                                        valuesForCompanionModels[valueToSupply.Key] = breeders;
+                                        break;
+                                    default:
+                                        throw new NotImplementedException(UnknownUnitsErrorText(this, valueToSupply.Key));
+                                }
+                                break;
+                            default:
+                                throw new NotImplementedException(UnknownCompanionModelErrorText(this, valueToSupply.Key));
+                        }
+                        break;
+                    default:
+                        throw new NotImplementedException(UnknownCompanionModelErrorText(this, valueToSupply.Key));
+                }
+            }
+            return null;
+        }
+
+        /// <inheritdoc/>
+        protected override void AdjustResourcesForTimestep()
+        {
+            IEnumerable<ResourceRequest> shortfalls = MinimumShortfallProportion();
+            if (shortfalls.Any())
+            {
+                // get greatest shortfall by proportion
+                var buyShort = shortfalls.OrderBy(a => a.Provided / a.Required).FirstOrDefault();
+                int reduce = Convert.ToInt32(breeders * buyShort.Provided / buyShort.Required);
+                breeders -= reduce;
+                this.Status = ActivityStatus.Partial;
+            }
+        }
+
+        /// <inheritdoc/>
         [EventSubscribe("CLEMAnimalBreeding")]
         private void OnCLEMAnimalBreeding(object sender, EventArgs e)
         {
-            if(this.TimingOK)
+            if (TimingOK)
             {
-                double malebreeders = SelectedOtherAnimalsType.Cohorts.Where(a => a.Age >= this.BreedingAge && a.Gender == Sex.Male).Sum(b => b.Number);
-                if (!UseLocalMales || malebreeders > 0)
+                ManageActivityResourcesAndTasks();
+
+                if (breeders > 0)
                 {
-                    // get number of females
-                    double breeders = SelectedOtherAnimalsType.Cohorts.Where(a => a.Age >= this.BreedingAge && a.Gender == Sex.Female).Sum(b => b.Number);
-                    // create new cohorts (male and female)
-                    if (breeders > 0)
+                    double newbysex = breeders * this.OffspringPerBreeder / 2.0;
+                    int singlesex = 0;
+
+                    // apply stochasticity to determine proportional numbers to integers
+                    if (newbysex - Math.Truncate(newbysex) > RandomNumberGenerator.Generator.Next())
+                        singlesex = Convert.ToInt32(Math.Ceiling(newbysex));
+                    else
+                        singlesex = Convert.ToInt32(Math.Floor(newbysex));
+
+                    double newweight = SelectedOtherAnimalsType.AgeWeightRelationship?.SolveY(0.0) ?? 0.0;
+                    if (singlesex > 1)
                     {
-                        double newbysex = breeders * this.OffspringPerBreeder / 2.0;
                         OtherAnimalsTypeCohort newmales = new OtherAnimalsTypeCohort()
                         {
                             Age = 0,
-                            Weight = 0,
-                            Gender = Sex.Male,
-                            Number = newbysex,
+                            Weight = newweight,
+                            Sex = Sex.Male,
+                            Number = singlesex,
+                            AdjustedNumber = singlesex,
                             SaleFlag = HerdChangeReason.Born
                         };
-                        SelectedOtherAnimalsType.Add(newmales, this, SelectedOtherAnimalsType.Name);
+                        SelectedOtherAnimalsType.Add(newmales, this, null, "Births");
+                        if (Status != ActivityStatus.Partial)
+                            Status = ActivityStatus.Success;
+                    }
+
+                    if (newbysex - Math.Truncate(newbysex) > RandomNumberGenerator.Generator.NextDouble())
+                        singlesex = Convert.ToInt32(Math.Ceiling(newbysex));
+                    else
+                        singlesex = Convert.ToInt32(Math.Floor(newbysex));
+
+                    if (singlesex > 1)
+                    {
                         OtherAnimalsTypeCohort newfemales = new OtherAnimalsTypeCohort()
                         {
                             Age = 0,
-                            Weight = 0,
-                            Gender = Sex.Female,
-                            Number = newbysex,
+                            Weight = newweight,
+                            Sex = Sex.Female,
+                            Number = singlesex,
+                            AdjustedNumber = singlesex,
                             SaleFlag = HerdChangeReason.Born
                         };
-                        SelectedOtherAnimalsType.Add(newfemales, this, SelectedOtherAnimalsType.Name);
+                        SelectedOtherAnimalsType.Add(newfemales, this, null, "Births");
+                        if (Status != ActivityStatus.Partial)
+                            Status = ActivityStatus.Success;
                     }
                 }
             }
         }
 
-        /// <summary>
-        /// Method used to perform activity if it can occur as soon as resources are available.
-        /// </summary>
-        public override void DoActivity()
+        #region descriptive summary
+
+        /// <inheritdoc/>
+        public override string ModelSummary()
         {
-            // this activity is performed in CLEMAnimalBreeding event
-        }
-
-        /// <summary>
-        /// Method to determine resources required for this activity in the current month
-        /// </summary>
-        /// <returns></returns>
-        public override List<ResourceRequest> GetResourcesNeededForActivity()
-        {
-            return null;
-        }
-
-        /// <summary>
-        /// Method to determine resources required for initialisation of this activity
-        /// </summary>
-        /// <returns></returns>
-        public override List<ResourceRequest> GetResourcesNeededForinitialisation()
-        {
-            return null;
-        }
-
-        /// <summary>
-        /// Resource shortfall event handler
-        /// </summary>
-        public override event EventHandler ResourceShortfallOccurred;
-
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnShortfallOccurred(EventArgs e)
-        {
-            ResourceShortfallOccurred?.Invoke(this, e);
-        }
-
-        /// <summary>
-        /// Resource shortfall occured event handler
-        /// </summary>
-        public override event EventHandler ActivityPerformed;
-
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnActivityPerformed(EventArgs e)
-        {
-            ActivityPerformed?.Invoke(this, e);
-        }
-
-        /// <summary>
-        /// Determines how much labour is required from this activity based on the requirement provided
-        /// </summary>
-        /// <param name="requirement">The details of how labour are to be provided</param>
-        /// <returns></returns>
-        public override double GetDaysLabourRequired(LabourRequirement requirement)
-        {
-            double breeders = SelectedOtherAnimalsType.Cohorts.Where(a => a.Age >= this.BreedingAge).Sum(b => b.Number);
-            if (breeders == 0)
+            using (StringWriter htmlWriter = new ())
             {
-                return 0;
-            }
+                htmlWriter.Write("\r\n<div class=\"activityentry\">");
+                htmlWriter.Write($"[r={DisplaySummaryValueSnippet(AnimalTypeName, "No Other Animal Type", HTMLSummaryStyle.Resource)}] individuals must be {DisplaySummaryValueSnippet(BreedingAge, "Mature age not set", HTMLSummaryStyle.Default)} months of age to breed.");
+                htmlWriter.Write("</div>");
 
-            double daysNeeded = 0;
-            switch (requirement.UnitType)
-            {
-                case LabourUnitType.Fixed:
-                    daysNeeded = requirement.LabourPerUnit;
-                    break;
-                case LabourUnitType.perHead:
-                    daysNeeded = Math.Ceiling(breeders / requirement.UnitSize) * requirement.LabourPerUnit;
-                    break;
-                default:
-                    throw new Exception(String.Format("LabourUnitType {0} is not supported for {1} in {2}", requirement.UnitType, requirement.Name, this.Name));
-            }
-            return daysNeeded;
-        }
+                htmlWriter.Write("\r\n<div class=\"activityentry\">");
+                if (UseLocalMales)
+                    htmlWriter.Write("Breeding will only occur when adult males are present in the local population.");
+                else
+                    htmlWriter.Write("Breeding will only regardless of whether adult males are present in the local population.");
+                htmlWriter.Write("</div>");
 
-        /// <summary>
-        /// The method allows the activity to adjust resources requested based on shortfalls (e.g. labour) before they are taken from the pools
-        /// </summary>
-        public override void AdjustResourcesNeededForActivity()
-        {
-            return;
+                htmlWriter.Write("\r\n<div class=\"activityentry\">");
+                htmlWriter.Write($"Each breeding female will produce {DisplaySummaryValueSnippet(OffspringPerBreeder, "Offspring not set", HTMLSummaryStyle.Default)} offspring with an equal sex ratio and rounded to whole individuals.");
+                htmlWriter.Write("</div>");
+
+                return htmlWriter.ToString();
+            }
         }
+        #endregion
+
     }
 }

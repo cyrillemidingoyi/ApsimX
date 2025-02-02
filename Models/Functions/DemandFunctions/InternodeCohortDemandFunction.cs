@@ -1,19 +1,14 @@
 using System;
 using Models.Core;
-using Models.Interfaces;
 using Models.PMF.Organs;
 using Models.PMF.Struct;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Calculate individual internode demand base on age and maxSize
-    /// </summary>
+    /// <summary>Calculate individual internode demand base on age and maxSize.</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    [Description("Calculate individual internode demand base on age and maxSize.")]
     public class InternodeCohortDemandFunction : Model, IFunction
     {
         /// <summary>YinBetaFunction Constructor</summary>
@@ -36,7 +31,7 @@ namespace Models.Functions.DemandFunctions
         /// <summary>The leaf </summary>
         [Link]
         Leaf Leaf = null;
-        
+
         /// <summary>The structure</summary>
         [Link]
         Structure Structure = null;
@@ -49,14 +44,14 @@ namespace Models.Functions.DemandFunctions
             foreach (LeafCohort L in Leaf.Leaves)
             {
                 if (L.IsAppeared)
-                { 
+                {
                     double maxSinkStrength = Lmax * ((2 * te - tm) / (te * (te - tm))) *
                         Math.Pow((tm / te), (tm / (te - tm)));
-                    double result = maxSinkStrength * 
-                        ((te - L.Age) / (te - tm)) * 
+                    double result = maxSinkStrength *
+                        ((te - L.Age) / (te - tm)) *
                         Math.Pow((L.Age / tm), (tm / (te - tm)));
 
-                     
+
                     if (L.Age > te)
                     {
                         sinkStrength += 0;
@@ -65,9 +60,9 @@ namespace Models.Functions.DemandFunctions
                     {
                         sinkStrength += result;
                     }
-                } 
+                }
             }
             return Structure.TotalStemPopn * sinkStrength;
         }
     }
-}   
+}

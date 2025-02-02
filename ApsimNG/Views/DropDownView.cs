@@ -1,29 +1,8 @@
-﻿namespace UserInterface.Views
+﻿using System;
+using Gtk;
+
+namespace UserInterface.Views
 {
-    using System;
-    using Gtk;
-
-    /// <summary>An interface for a drop down</summary>
-    public interface IDropDownView
-    {
-        /// <summary>Invoked when the user changes the selection</summary>
-        event EventHandler Changed;
-
-        /// <summary>Gets or sets the list of valid values.</summary>
-        string[] Values { get; set; }
-
-        /// <summary>Gets or sets the selected value.</summary>
-        string SelectedValue { get; set; }
-
-        /// <summary>Gets or sets a value indicating if the dropdown is visible.</summary>
-        bool Visible { get; set; }
-
-        /// <summary>Gets or sets whether the control should be editable.</summary>
-        bool IsEditable { get; set; }
-
-        /// <summary>Controls whether the user can change the selected item.</summary>
-        bool IsSensitive { get; set; }
-    }
 
     /// <summary>A drop down view.</summary>
     public class DropDownView : ViewBase, IDropDownView
@@ -106,7 +85,7 @@
             {
                 combobox1.Changed -= OnSelectionChanged;
                 comboModel.Dispose();
-                comboRender.Destroy();
+                comboRender.Dispose();
                 mainWidget.Destroyed -= _mainWidget_Destroyed;
                 owner = null;
             }
@@ -210,7 +189,6 @@
             {
                 return combobox1.Visible;
             }
-
             set
             {
                 combobox1.Visible = value;
@@ -285,5 +263,27 @@
 
             return result;
         }
+    }
+
+    /// <summary>An interface for a drop down</summary>
+    public interface IDropDownView
+    {
+        /// <summary>Invoked when the user changes the selection</summary>
+        event EventHandler Changed;
+
+        /// <summary>Gets or sets the list of valid values.</summary>
+        string[] Values { get; set; }
+
+        /// <summary>Gets or sets the selected value.</summary>
+        string SelectedValue { get; set; }
+
+        /// <summary>Gets or sets a value indicating if the dropdown is visible.</summary>
+        bool Visible { get; set; }
+
+        /// <summary>Gets or sets whether the control should be editable.</summary>
+        bool IsEditable { get; set; }
+
+        /// <summary>Controls whether the user can change the selected item.</summary>
+        bool IsSensitive { get; set; }
     }
 }

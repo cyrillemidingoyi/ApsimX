@@ -1,11 +1,13 @@
-﻿namespace Models.Soils.Arbitrator
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Interfaces;
+using Models.Soils.NutrientPatching;
+
+namespace Models.Soils.Arbitrator
 {
-    using System;
-    using System.Collections.Generic;
-    using Models.Core;
-    using Interfaces;
-    using System.Linq;
-    using APSIM.Shared.Utilities;
 
     /// <summary>
     /// The APSIM farming systems model has a long history of use for simulating mixed or intercropped systems.  Doing this requires methods for simulating the competition of above and below ground resources.  Above ground competition for light has been calculated within APSIM assuming a mixed turbid medium using the Beer-Lambert analogue as described by [Keating1993Intercropping].  The MicroClimate [Snow2004Micromet] model now used within APSIM builds upon this by also calculating the impact of mutual shading on canopy conductance and partitions aerodynamic conductance to individual species in applying the Penman-Monteith model for calculating potential crop water use.  The arbitration of below ground resources of water and nitrogen is calculated by this model.
@@ -17,24 +19,24 @@
     /// If Y is any soil resource, such as water or N, and U is the uptake of that resource by one or more plant root systems,  
     /// then
     /// 
-    /// Y<sub>t+1</sub> = Y<sub>t</sub> - U
+    /// Y~t+1~ = Y~t~ - U
     /// 
     /// Because U will change through the time period in complex manners depending on the number and nature of demands for that resource, we use Runge-Kutta to integrate through that time period using
     /// 
-    /// Y<sub>t+1</sub>= Y<sub>t</sub> + 1/6 x (U<sub>1</sub>+ 2xU<sub>2</sub> + 2xU<sub>3</sub> + U<sub>4</sub>) 
+    /// Y~t+1~= Y~t~ + 1/6 x (U~1~+ 2xU~2~ + 2xU~3~ + U~4~) 
     /// 
-    /// Where U<sub>1</sub>,U<sub>2</sub>,U<sub>3</sub> and U<sub>4</sub> are 4 estimates of the Uptake rates calculated by the crop models given a range of soil resource conditions, as follows:
+    /// Where U~1~,U~2~,U~3~ and U~4~ are 4 estimates of the Uptake rates calculated by the crop models given a range of soil resource conditions, as follows:
     /// 
-    /// U<sub>1</sub> = f(Y<sub>t</sub>),
+    /// U~1~ = f(Y~t~),
     /// 
-    /// U<sub>2</sub> = f(Y<sub>t</sub> - 0.5xU<sub>1</sub>),
+    /// U~2~ = f(Y~t~ - 0.5xU~1~),
     /// 
-    /// U<sub>3</sub> = f(Y<sub>t</sub> - 0.5xU<sub>2</sub>),
+    /// U~3~ = f(Y~t~ - 0.5xU~2~),
     /// 
-    /// U<sub>4</sub> = f(Y<sub>t</sub> - U<sub>3</sub>).
+    /// U~4~ = f(Y~t~ - U~3~).
     /// 
-    /// So U<sub>1</sub> is the estimate based on the uptake rates at the beginning of the time interval, similar to a simple Euler method.
-    /// U<sub>2</sub> and U<sub>3</sub> are estimates based on the rates somewhere near the midpoint of the time interval.  U<sub>4</sub> is the estimate based on the rates toward the end of the time interval.
+    /// So U~1~ is the estimate based on the uptake rates at the beginning of the time interval, similar to a simple Euler method.
+    /// U~2~ and U~3~ are estimates based on the rates somewhere near the midpoint of the time interval.  U~4~ is the estimate based on the rates toward the end of the time interval.
     /// 
     /// The iterative procedure allows crops to influence the uptake of other crops via various feedback mechanisms.  For example,  crops rapidly extracting water from near the surface will dry the soil in those layers, which will force deeper rooted crops to potentially extract water from lower layers. Uptakes can notionally be of either sign, and so trees providing hydraulic lift of water from water tables could potentially make this water available for uptake by mutplie understory species within the timestep.  Crops are responsible for meeting resource demand by whatever means they prefer.  And so, leguminous crops may start by taking up mineral N at the start of the day but rely on fixation later in a time period if N becomes limiting.  This will reduce competition from others and change the balance dynamically throughout the integration period. 
     /// 
@@ -97,26 +99,51 @@
         private void DoArbitration(Estimate.CalcType arbitrationType)
         {
             InitialSoilState.Initialise();
+            SoilState modifiedSoilState = new SoilState(InitialSoilState);
 
             Estimate UptakeEstimate1 = new Estimate(this.Parent, arbitrationType, InitialSoilState, uptakeModels);
-            Estimate UptakeEstimate2 = new Estimate(this.Parent, arbitrationType, InitialSoilState - UptakeEstimate1 * 0.5, uptakeModels);
-            Estimate UptakeEstimate3 = new Estimate(this.Parent, arbitrationType, InitialSoilState - UptakeEstimate2 * 0.5, uptakeModels);
-            Estimate UptakeEstimate4 = new Estimate(this.Parent, arbitrationType, InitialSoilState - UptakeEstimate3, uptakeModels);
+
+            ModifySoilState(InitialSoilState, modifiedSoilState, UptakeEstimate1, 0.5);
+            Estimate UptakeEstimate2 = new Estimate(this.Parent, arbitrationType, modifiedSoilState, uptakeModels);
+
+            ModifySoilState(InitialSoilState, modifiedSoilState, UptakeEstimate2, 0.5);
+            Estimate UptakeEstimate3 = new Estimate(this.Parent, arbitrationType, modifiedSoilState, uptakeModels);
+
+            ModifySoilState(InitialSoilState, modifiedSoilState, UptakeEstimate3, 1.0);
+            Estimate UptakeEstimate4 = new Estimate(this.Parent, arbitrationType, modifiedSoilState, uptakeModels);
 
             List<ZoneWaterAndN> listOfZoneUptakes = new List<ZoneWaterAndN>();
-            List <CropUptakes> ActualUptakes = new List<CropUptakes>();
+            List<CropUptakes> ActualUptakes = new List<CropUptakes>();
             foreach (CropUptakes U in UptakeEstimate1.Values)
             {
                 CropUptakes CU = new CropUptakes();
                 CU.Crop = U.Crop;
                 foreach (ZoneWaterAndN ZU in U.Zones)
                 {
-                    ZoneWaterAndN NewZone = UptakeEstimate1.UptakeZone(CU.Crop, ZU.Zone.Name) * (1.0 / 6.0)
-                                        + UptakeEstimate2.UptakeZone(CU.Crop, ZU.Zone.Name) * (1.0 / 3.0)
-                                        + UptakeEstimate3.UptakeZone(CU.Crop, ZU.Zone.Name) * (1.0 / 3.0)
-                                        + UptakeEstimate4.UptakeZone(CU.Crop, ZU.Zone.Name) * (1.0 / 6.0);
-                    CU.Zones.Add(NewZone);
-                    listOfZoneUptakes.Add(NewZone);
+                    var estimate1 = UptakeEstimate1.GetUptakeForCropAndZone(CU.Crop, ZU.Zone.Name);
+                    var estimate2 = UptakeEstimate2.GetUptakeForCropAndZone(CU.Crop, ZU.Zone.Name);
+                    var estimate3 = UptakeEstimate3.GetUptakeForCropAndZone(CU.Crop, ZU.Zone.Name);
+                    var estimate4 = UptakeEstimate4.GetUptakeForCropAndZone(CU.Crop, ZU.Zone.Name);
+
+                    ZoneWaterAndN newZone = estimate1;
+                    for (int i = 0; i < estimate1.Water.Length; i++)
+                    {
+                        newZone.Water[i] = estimate1.Water[i] * (1.0 / 6.0) +
+                                           estimate2.Water[i] * (1.0 / 3.0) +
+                                           estimate3.Water[i] * (1.0 / 3.0) +
+                                           estimate4.Water[i] * (1.0 / 6.0);
+                        newZone.NO3N[i] = estimate1.NO3N[i] * (1.0 / 6.0) +
+                                          estimate2.NO3N[i] * (1.0 / 3.0) +
+                                          estimate3.NO3N[i] * (1.0 / 3.0) +
+                                          estimate4.NO3N[i] * (1.0 / 6.0);
+                        newZone.NH4N[i] = estimate1.NH4N[i] * (1.0 / 6.0) +
+                                          estimate2.NH4N[i] * (1.0 / 3.0) +
+                                          estimate3.NH4N[i] * (1.0 / 3.0) +
+                                          estimate4.NH4N[i] * (1.0 / 6.0);
+                    }
+
+                    CU.Zones.Add(newZone);
+                    listOfZoneUptakes.Add(newZone);
                 }
 
                 ActualUptakes.Add(CU);
@@ -131,6 +158,22 @@
                 else
                     Uptake.Crop.SetActualNitrogenUptakes(Uptake.Zones);
             }
+        }
+
+        private void ModifySoilState(SoilState initialSoilState, SoilState modifiedState, Estimate estimate, double fraction)
+        {
+            foreach (CropUptakes cropUptake in estimate.Values)
+                foreach (ZoneWaterAndN cropUptakeZone in cropUptake.Zones)
+                    foreach (var (initialZone, modifiedZone) in initialSoilState.Zones.Zip(modifiedState.Zones))
+                        if (cropUptakeZone.Zone.Name == initialZone.Zone.Name)
+                        {
+                            for (int i = 0; i < initialZone.Water.Length; i++)
+                            {
+                                modifiedZone.Water[i] = Math.Max(0, initialZone.Water[i] - cropUptakeZone.Water[i] * fraction);
+                                modifiedZone.NO3N[i] = Math.Max(0, initialZone.NO3N[i] - cropUptakeZone.NO3N[i] * fraction);
+                                modifiedZone.NH4N[i] = Math.Max(0, initialZone.NH4N[i] - cropUptakeZone.NH4N[i] * fraction);
+                            }
+                        }
         }
 
         /// <summary>

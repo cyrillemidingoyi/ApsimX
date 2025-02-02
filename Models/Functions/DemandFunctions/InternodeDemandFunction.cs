@@ -1,17 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using Models.Core;
 using Models.PMF.Struct;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Calculate internode demand
-    /// </summary>
+    /// <summary>Internode demand is calculated fromm the product of change in node number, stem population and internode weight.</summary>
     [Serializable]
-    [Description("Internode demand is calculated fromm the product of change in node number, stem population and internode weight.")]
     public class InternodeDemandFunction : Model, IFunction
     {
         /// <summary>The inter node wt</summary>
@@ -29,4 +23,4 @@ namespace Models.Functions.DemandFunctions
             return Structure.DeltaTipNumber * Structure.TotalStemPopn * InterNodeWt.Value(arrayIndex);
         }
     }
-}   
+}

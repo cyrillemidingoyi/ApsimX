@@ -1,13 +1,14 @@
-﻿namespace UserInterface.Presenters
-{
-    using System;
-    using System.Collections.Generic;
-    using System.Drawing;
-    using APSIM.Shared.Utilities;
-    using EventArguments;
-    using Models;
-    using Views;
+﻿using System;
+using System.Collections.Generic;
+using System.Drawing;
+using APSIM.Shared.Utilities;
+using Models;
+using UserInterface.EventArguments;
+using UserInterface.Interfaces;
+using UserInterface.Views;
 
+namespace UserInterface.Presenters
+{
     /// <summary>
     /// A presenter class for showing an operations model in an operations view.
     /// </summary>
@@ -21,7 +22,7 @@
         /// <summary>
         /// The view object
         /// </summary>
-        private EditorView view;
+        private IEditorView view;
 
         /// <summary>
         /// The explorer presenter
@@ -42,7 +43,7 @@
         public void Attach(object model, object view, ExplorerPresenter explorerPresenter)
         {
             this.operations = model as Operations;
-            this.view = view as EditorView;
+            this.view = view as IEditorView;
             this.explorerPresenter = explorerPresenter;
             this.intellisense = new IntellisensePresenter(view as ViewBase);
             intellisense.ItemSelected += OnIntellisenseItemSelected;
@@ -70,19 +71,7 @@
         /// </summary>
         private void PopulateEditorView()
         {
-            string st = string.Empty;
-            if (operations.Operation != null)
-                foreach (Operation operation in this.operations.Operation)
-                {
-                    // st += operation.Date.ToString("yyyy-MM-dd") + " " + operation.Action + Environment.NewLine;
-                    string dateStr = null;
-                    if (!string.IsNullOrEmpty(operation.Date))
-                        dateStr = DateUtilities.validateDateString(operation.Date);
-                    string commentChar = operation.Enabled ? string.Empty : "// ";
-                    st += commentChar + dateStr + " " + operation.Action + Environment.NewLine;
-                }
-
-            this.view.Text = st;
+            this.view.Text = this.operations.OperationsAsString;
         }
 
         /// <summary>
@@ -94,35 +83,19 @@
         {
             try
             {
+                explorerPresenter.MainPresenter.ClearStatusPanel();
                 this.explorerPresenter.CommandHistory.ModelChanged -= this.OnModelChanged;
-                List<Operation> operations = new List<Operation>();
+
+                string input = "";
                 foreach (string line in this.view.Lines)
                 {
-                    string currentLine = line;
-                    bool isComment = line.Trim().StartsWith("//");
-                    if (isComment)
-                    {
-                        int index = line.IndexOf("//");
-                        if (index >= 0)
-                            currentLine = currentLine.Remove(index, 2).Trim();
-                    }
-
-                    int pos = currentLine.IndexOfAny(" \t".ToCharArray());
-                    if (pos != -1)
-                    {
-                        Operation operation = new Operation();
-                        string dateString = currentLine.Substring(0, pos);
-                        operation.Date = DateUtilities.validateDateString(dateString);
-                        if (operation.Date == null)
-                            explorerPresenter.MainPresenter.ShowMessage($"Warning: unable to parse date string {dateString}", Models.Core.Simulation.MessageType.Warning);
-
-                        operation.Action = currentLine.Substring(pos + 1);
-                        operation.Enabled = !isComment;
-                        operations.Add(operation);
-                    }
+                    input += line + Environment.NewLine;
+                    if (line.Length > 0)                  
+                        if (Operation.ParseOperationString(line.Trim()) == null)
+                            explorerPresenter.MainPresenter.ShowMessage($"Warning: unable to parse operation '{line}'", Models.Core.Simulation.MessageType.Warning);
                 }
 
-                this.explorerPresenter.CommandHistory.Add(new Commands.ChangeProperty(this.operations, "Operation", operations));
+                this.explorerPresenter.CommandHistory.Add(new Commands.ChangeProperty(this.operations, "OperationsAsString", input));
                 this.explorerPresenter.CommandHistory.ModelChanged += this.OnModelChanged;
             }
             catch (Exception err)

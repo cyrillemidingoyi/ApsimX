@@ -47,9 +47,14 @@ namespace Utility
 
             document["Configuration"]["Version"].InnerText = version.ToString();
 
-            XmlSerializer serializer = new XmlSerializer(typeof(Configuration));
+            XmlSerializer serializer = new XmlSerializer(typeof(Configuration), typeof(Configuration).GetNestedTypes());
             using (XmlReader reader = new XmlNodeReader(document))
-                return serializer.Deserialize(reader) as Configuration;
+            {
+                Configuration configurationSettings = serializer.Deserialize(reader) as Configuration;
+                // reset to false as this should be false at the beginning of every APSIM launch.
+                configurationSettings.ThemeRestartRequired = false;
+                return configurationSettings;
+            }
         }
 
         /// <summary>

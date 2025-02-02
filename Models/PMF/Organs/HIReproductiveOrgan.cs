@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using Models.Core;
 using Models.Functions;
+using Models.Interfaces;
 using Models.PMF.Interfaces;
 using Models.PMF.Library;
-using Models.Interfaces;
 using Newtonsoft.Json;
 
 namespace Models.PMF.Organs
@@ -13,7 +14,7 @@ namespace Models.PMF.Organs
     /// </summary>
     [Serializable]
     [ValidParent(ParentType = typeof(Plant))]
-    public class HIReproductiveOrgan : Model, IOrgan, IArbitration, IOrganDamage
+    public class HIReproductiveOrgan : Model, IOrgan, IArbitration, IOrganDamage, IHasDamageableBiomass
     {
         /// <summary>The surface organic matter model</summary>
         [Link]
@@ -78,7 +79,7 @@ namespace Models.PMF.Organs
         public Biomass Removed { get; set; }
 
         /// <summary>The amount of mass lost each day from maintenance respiration</summary>
-        virtual public double MaintenanceRespiration { get { return 0; } set { } }
+        public double MaintenanceRespiration { get { return 0; } }
 
         /// <summary>The dry matter demand</summary>
         public BiomassPoolType DMDemand { get; set; }
@@ -86,29 +87,33 @@ namespace Models.PMF.Organs
         /// <summary>Structural nitrogen demand</summary>
         public BiomassPoolType NDemand { get; set; }
 
-        /// <summary>The dry matter demand</summary>
-        public BiomassPoolType DMDemandPriorityFactor { get; set; }
-
         /// <summary>The dry matter supply</summary>
         public BiomassSupplyType DMSupply { get; set; }
 
         /// <summary>The nitrogen supply</summary>
-        public BiomassSupplyType NSupply { get;  set; }
+        public BiomassSupplyType NSupply { get; set; }
 
         /// <summary>Sets the dm potential allocation.</summary>
         /// <summary>Sets the dry matter potential allocation.</summary>
-         public void SetDryMatterPotentialAllocation(BiomassPoolType dryMatter) { }
-        
+        public void SetDryMatterPotentialAllocation(BiomassPoolType dryMatter) { }
+
         /// <summary>Gets or sets the n fixation cost.</summary>
         [JsonIgnore]
-         public double NFixationCost { get { return 0; } }
+        public double NFixationCost { get { return 0; } }
 
         /// <summary>Minimum N concentration</summary>
         [JsonIgnore]
-         public double MinNconc { get { return 0; } }
+        public double MinNconc { get { return 0; } }
 
-
-
+        /// <summary>A list of material (biomass) that can be damaged.</summary>
+        public IEnumerable<DamageableBiomass> Material
+        {
+            get
+            {
+                yield return new DamageableBiomass($"{Parent.Name}.{Name}", Live, true);
+                yield return new DamageableBiomass($"{Parent.Name}.{Name}", Dead, false);
+            }
+        }
 
         /// <summary>Gets the live f wt.</summary>
         /// <value>The live f wt.</value>
@@ -138,7 +143,7 @@ namespace Models.PMF.Organs
         [EventSubscribe("DoDailyInitialisation")]
         protected void OnDoDailyInitialisation(object sender, EventArgs e)
         {
-            if (parentPlant.IsAlive || parentPlant.IsEnding)
+            if (parentPlant.IsAlive)
                 ClearBiomassFlows();
         }
 
@@ -151,10 +156,6 @@ namespace Models.PMF.Organs
             Live = new Biomass();
             Dead = new Biomass();
             DMDemand = new BiomassPoolType();
-            DMDemandPriorityFactor = new BiomassPoolType();
-            DMDemandPriorityFactor.Structural = 1.0;
-            DMDemandPriorityFactor.Metabolic = 1.0;
-            DMDemandPriorityFactor.Storage = 1.0;
             NDemand = new BiomassPoolType();
             DMSupply = new BiomassSupplyType();
             NSupply = new BiomassSupplyType();
@@ -193,6 +194,16 @@ namespace Models.PMF.Organs
             Clear();
         }
 
+        /// <summary>Called when crop is harvested</summary>
+        /// <param name="sender">The sender.</param>
+        /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
+        [EventSubscribe("PostHarvesting")]
+        protected void OnPostHarvesting(object sender, HarvestingParameters e)
+        {
+            if (e.RemoveBiomass)
+                Harvest();
+        }
+
         /// <summary>Gets the hi.</summary>
         /// <value>The hi.</value>
         public double HI
@@ -214,7 +225,7 @@ namespace Models.PMF.Organs
         }
 
         /// <summary>Sets the n allocation.</summary>
-        public  void SetNitrogenAllocation(BiomassAllocationType nitrogen)
+        public void SetNitrogenAllocation(BiomassAllocationType nitrogen)
         {
             Live.StructuralN += nitrogen.Structural;
         }
@@ -262,12 +273,23 @@ namespace Models.PMF.Organs
             Live.StorageWt = Live.StorageWt - (respiration * Live.StorageWt / total);
         }
 
-        /// <summary>Removes biomass from organs when harvest, graze or cut events are called.</summary>
-        /// <param name="biomassRemoveType">Name of event that triggered this biomass remove call.</param>
-        /// <param name="amountToRemove">The fractions of biomass to remove</param>
-        public void RemoveBiomass(string biomassRemoveType, OrganBiomassRemovalType amountToRemove)
+        /// <summary>Remove biomass from organ.</summary>
+        /// <param name="liveToRemove">Fraction of live biomass to remove from simulation (0-1).</param>
+        /// <param name="deadToRemove">Fraction of dead biomass to remove from simulation (0-1).</param>
+        /// <param name="liveToResidue">Fraction of live biomass to remove and send to residue pool(0-1).</param>
+        /// <param name="deadToResidue">Fraction of dead biomass to remove and send to residue pool(0-1).</param>
+        /// <returns>The amount of biomass (live+dead) removed from the plant (g/m2).</returns>
+        public double RemoveBiomass(double liveToRemove, double deadToRemove, double liveToResidue, double deadToResidue)
         {
-            biomassRemovalModel.RemoveBiomass(biomassRemoveType, amountToRemove, Live, Dead, Removed, Detached);
+            return biomassRemovalModel.RemoveBiomass(liveToRemove, deadToRemove, liveToResidue, deadToResidue, Live, Dead, Removed, Detached);
+        }
+
+        /// <summary>Harvest the organ.</summary>
+        /// <returns>The amount of biomass (live+dead) removed from the plant (g/m2).</returns>
+        public double Harvest()
+        {
+            return RemoveBiomass(biomassRemovalModel.HarvestFractionLiveToRemove, biomassRemovalModel.HarvestFractionDeadToRemove,
+                                 biomassRemovalModel.HarvestFractionLiveToResidue, biomassRemovalModel.HarvestFractionDeadToResidue);
         }
 
         /// <summary>Clears this instance.</summary>
@@ -277,6 +299,16 @@ namespace Models.PMF.Organs
             Dead.Clear();
             DMDemand.Clear();
             NDemand.Clear();
+            DMSupply.Clear();
+            NSupply.Clear();
+            potentialDMAllocation.Clear();
+            DailyGrowth = 0;
+            GrowthRespiration = 0;
+            Allocated.Clear();
+            Senesced.Clear();
+            Detached.Clear();
+            Removed.Clear();
+
         }
 
         /// <summary>Clears the transferring biomass amounts.</summary>

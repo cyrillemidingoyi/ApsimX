@@ -1,15 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
 using Models.Core;
-using APSIM.Shared.Utilities;
-using Models.Interfaces;
 
 namespace Models.Functions.SupplyFunctions
 {
     /// <summary>
-    /// # [Name]
     /// Leaf gross photosynthesis rate is determined using an input gross photosynthesis rate at reference CO2 concentration (340~350ppm) and at optimal temperature of 27.5C, 
     /// together with the CO2 concentrartion in the air and the daily daytime temperature. 
     /// For C3 crop, the Ps-CO2 relationship used is from ORYZA2000 Bauman et al (2001)
@@ -18,7 +12,7 @@ namespace Models.Functions.SupplyFunctions
     /// </summary>
     /// 
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(CanopyPhotosynthesis))]
 
@@ -77,16 +71,16 @@ namespace Models.Functions.SupplyFunctions
 
                 CO2 = Math.Max(CO2, CO2Cmp);
                 CO2I = CO2R * CO2;
-  
+
                 //For C4 crop, AgPasture Proposed by Cullen et al. (2009) based on FACE experiments
-                CO2Func = CO2/ (CO2 + 150) * (CO2ref + 150)/CO2ref;
+                CO2Func = CO2 / (CO2 + 150) * (CO2ref + 150) / CO2ref;
 
             }
 
             else
                 throw new ApsimXException(this, "Need to be C3 or C4");
 
-        
+
             //------------------------------------------------------------------------
             //Temperature response and Efect of daytime temperature
 

@@ -1,39 +1,27 @@
-﻿using System.IO;
-using System.Xml;
-using Models.Core;
-using Newtonsoft.Json;
-using System;
-using System.Reflection;
+﻿using System;
 using System.Collections.Generic;
-using Models.Factorial;
-using APSIM.Shared.Utilities;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using APSIM.Shared.Utilities;
+using Models.Core.ApsimFile;
 using Models.Core.Interfaces;
 using Models.Storage;
-using Newtonsoft.Json.Serialization;
-using Models.Core.ApsimFile;
-using Models.Core.Run;
+using Newtonsoft.Json;
 
 namespace Models.Core
 {
     /// <summary>
-    /// # [Name]
-    /// Encapsulates a collection of simulations. It is responsible for creating this collection,
-    /// changing the structure of the components within the simulations, renaming components, adding
-    /// new ones, deleting components. The user interface talks to an instance of this class.
+    /// Encapsulates a collection of simulations. It is responsible for creating this collection, changing the structure of the components within the simulations, renaming components, adding new ones, deleting components. The user interface talks to an instance of this class.
     /// </summary>
     [Serializable]
     [ScopedModel]
-    [ViewName("UserInterface.Views.HTMLView")]
+    [ViewName("UserInterface.Views.MarkdownView")]
     [PresenterName("UserInterface.Presenters.GenericPresenter")]
     public class Simulations : Model, ISimulationEngine
     {
         [NonSerialized]
         private Links links;
-
-        /// <summary>Gets or sets the width of the explorer.</summary>
-        /// <value>The width of the explorer.</value>
-        public Int32 ExplorerWidth { get; set; }
 
         /// <summary>Gets or sets the version.</summary>
         [System.Xml.Serialization.XmlAttribute("Version")]
@@ -102,7 +90,7 @@ namespace Models.Core
         /// <summary>
         /// Return the current APSIM version number.
         /// </summary>
-        public string ApsimVersion
+        public static string ApsimVersion
         {
             get
             {
@@ -156,7 +144,7 @@ namespace Models.Core
                 storage.Reader.Refresh();
             }
             List<Exception> creationExceptions = new List<Exception>();
-            return FileFormat.ReadFromFile<Simulations>(FileName, out creationExceptions);
+            return FileFormat.ReadFromFile<Simulations>(FileName, e => throw e, false).NewModel as Simulations;
         }
 
         /// <summary>Write the specified simulation set to the specified filename</summary>
@@ -174,6 +162,42 @@ namespace Models.Core
                 File.Move(FileName, bakFileName);
             File.Move(tempFileName, FileName);
             this.FileName = FileName;
+            SetFileNameInAllSimulations();
+        }
+
+        /// <summary>Write the specified simulation set to the specified directory path.</summary>
+        /// <param name="currentFileName">FileName property of the simulation set.</param>
+        /// <param name="savePath">The location where the simulation should be saved.</param>
+        public void Write(string currentFileName, string savePath) // TODO: needs testing in conjunction with Main.cs --apply switch.
+        {
+            try
+            {
+                string tempFileName = Path.GetTempFileName();
+                File.WriteAllText(tempFileName, FileFormat.WriteToString(this));
+
+                // If we get this far without an exception then copy the tempfilename over our filename,
+                // creating a backup (.bak) in the process.
+                string bakFileName = currentFileName + ".bak";
+                File.Delete(bakFileName);
+                if (File.Exists(currentFileName))
+                    File.Move(currentFileName, bakFileName);
+                File.Move(tempFileName, currentFileName);
+                File.Move(currentFileName, savePath, true);
+                this.FileName = savePath;
+                SetFileNameInAllSimulations();
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"An error occured trying to save a simulation to {savePath}. {e}");
+            }
+
+        }
+
+        /// <summary>
+        /// Resets the FileName property of each Simulation model in the APSIMX file.
+        /// </summary>
+        public void ResetSimulationFileNames()
+        {
             SetFileNameInAllSimulations();
         }
 
@@ -201,7 +225,7 @@ namespace Models.Core
         {
             links = null;
         }
-        
+
         /// <summary>
         /// Gets the services objects.
         /// </summary>
@@ -239,69 +263,20 @@ namespace Models.Core
         }
 
         /// <summary>Find all referenced files from all models.</summary>
-        public IEnumerable<string> FindAllReferencedFiles()
+        public IEnumerable<string> FindAllReferencedFiles(bool isAbsolute = true)
         {
             SortedSet<string> fileNames = new SortedSet<string>();
-            foreach (IReferenceExternalFiles model in this.FindAllDescendants<IReferenceExternalFiles>())
+            foreach (IReferenceExternalFiles model in this.FindAllDescendants<IReferenceExternalFiles>().Where(m => m.Enabled))
                 foreach (string fileName in model.GetReferencedFileNames())
-                    fileNames.Add(PathUtilities.GetAbsolutePath(fileName, FileName));
-            
+                    if (isAbsolute == true)
+                    {
+                        fileNames.Add(PathUtilities.GetAbsolutePath(fileName, FileName));
+                    }
+                    else
+                    {
+                        fileNames.Add(fileName);
+                    }
             return fileNames;
         }
-
-        /// <summary>Documents the specified model.</summary>
-        /// <param name="modelNameToDocument">The model name to document.</param>
-        /// <param name="tags">The auto doc tags.</param>
-        /// <param name="headingLevel">The starting heading level.</param>
-        public void DocumentModel(string modelNameToDocument, List<AutoDocumentation.ITag> tags, int headingLevel)
-        {
-            Simulation simulation = this.FindInScope<Simulation>();
-            if (simulation != null)
-            {
-                // Find the model of the right name.
-                IModel modelToDocument = simulation.FindInScope(modelNameToDocument);
-
-                // If not found then find a model of the specified type.
-                if (modelToDocument == null)
-                    modelToDocument = simulation.FindByPath("[" + modelNameToDocument + "]")?.Value as IModel;
-
-                // If the simulation has the same name as the model we want to document, dig a bit deeper
-                if (modelToDocument == simulation)
-                    modelToDocument = simulation.FindAllDescendants().Where(m => !m.IsHidden).ToList().FirstOrDefault(m => m.Name.Equals(modelNameToDocument, StringComparison.OrdinalIgnoreCase));
-
-                // If still not found throw an error.
-                if (modelToDocument != null)
-                {
-                    // Get the path of the model (relative to parentSimulation) to document so that 
-                    // when replacements happen below we will point to the replacement model not the 
-                    // one passed into this method.
-                    string pathOfSimulation = simulation.FullPath + ".";
-                    string pathOfModelToDocument = modelToDocument.FullPath.Replace(pathOfSimulation, "");
-
-                    // Clone the simulation
-                    SimulationDescription simDescription = new SimulationDescription(simulation);
-
-                    Simulation clonedSimulation = simDescription.ToSimulation();
-
-                    // Now use the path to get the model we want to document.
-                    modelToDocument = clonedSimulation.FindByPath(pathOfModelToDocument)?.Value as IModel;
-
-                    if (modelToDocument == null)
-                        throw new Exception("Cannot find model to document: " + modelNameToDocument);
-
-                    // resolve all links in cloned simulation.
-                    Links.Resolve(clonedSimulation, true);
-
-                    modelToDocument.IncludeInDocumentation = true;
-
-                    // Document the model.
-                    AutoDocumentation.DocumentModel(modelToDocument, tags, headingLevel, 0, documentAllChildren:true);
-
-                    // Unresolve links.
-                    Links.Unresolve(clonedSimulation, true);
-                }
-            }
-        }
-
     }
 }

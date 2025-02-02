@@ -1,19 +1,18 @@
 ﻿using System;
 using Models.Core;
 using Models.Climate;
-using Models.PMF;
 using Models.Interfaces;
-using APSIM.Shared.Utilities;
 using Newtonsoft.Json;
+using APSIM.Shared.Utilities;
+
 
 namespace Models.Agroforestry
 {
     /// <summary>
-    /// # [Name]
     /// Class to calculate and communicate local microclimate in agroforestry systems
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Simulation))]
     [ValidParent(ParentType = typeof(Zone))]
@@ -40,6 +39,10 @@ namespace Models.Agroforestry
         /// <summary>Gets or sets the minimum temperature (oc)</summary>
         [JsonIgnore]
         public double MinT { get { return weather.MinT; } set { weather.MinT = value; } }
+
+        /// <summary>Pan evaporation</summary>
+        [JsonIgnore]
+        public double PanEvap { get { return weather.PanEvap; } set{ weather.PanEvap = value; } }
 
         /// <summary>
         /// Daily Mean temperature (oC)
@@ -93,7 +96,13 @@ namespace Models.Agroforestry
         /// Gets or sets the atmospheric air pressure. If not specified in the weather file the default is 1010 hPa.
         /// </summary>
         [JsonIgnore]
-        public double AirPressure { get { return weather.AirPressure; } }
+        public double AirPressure { get { return weather.AirPressure; } set { weather.AirPressure = value; } }
+
+        /// <summary>
+        /// Gets or sets the diffuse radiation fraction. If not specified in the weather file the default is 1.
+        /// </summary>
+        [JsonIgnore]
+        public double DiffuseFraction { get { return weather.DiffuseFraction; } set { weather.DiffuseFraction = value; } }
 
         /// <summary>Gets the latitude</summary>
         [JsonIgnore]
@@ -111,13 +120,17 @@ namespace Models.Agroforestry
         [JsonIgnore]
         public double Amp { get { return weather.Amp; } }
 
-        /// <summary>Met Data from yesterday</summary>
+        /// <summary>Gets the temperature amplitude.</summary>
         [JsonIgnore]
-        public DailyMetDataFromFile YesterdaysMetData { get; set; }
+        public string FileName { get { return weather.FileName; } }
 
         /// <summary>Met Data from yesterday</summary>
         [JsonIgnore]
-        public DailyMetDataFromFile TomorrowsMetData { get; set; }
+        public DailyMetDataFromFile YesterdaysMetData { get { return weather.YesterdaysMetData; } }
+
+        /// <summary>Met Data from yesterday</summary>
+        [JsonIgnore]
+        public DailyMetDataFromFile TomorrowsMetData { get { return weather.TomorrowsMetData; } }
 
         /// <summary>Gets the duration of the day in hours.</summary>
         public double CalculateDayLength(double Twilight) { return weather.CalculateDayLength(Twilight); }

@@ -1,11 +1,9 @@
-﻿using UserInterface.Views;
+﻿using System;
+using System.Collections.Generic;
+using UserInterface.Views;
+
 namespace UserInterface.Interfaces
 {
-    
-    using System;
-    using System.Collections.Generic;
-    using System.Runtime.Serialization;
-
     /// <summary>
     /// This interface encapsulates a hierachical tree view that the user interacts with.
     /// </summary>
@@ -45,6 +43,13 @@ namespace UserInterface.Interfaces
         /// <param name="rootNode">A description of the top level root node</param>
         void Populate(TreeViewNode rootNode);
 
+        /// <summary>
+        /// Refresh the node at the given data..
+        /// </summary>
+        /// <param name="path">The node to refresh.</param>
+        /// <param name="description">Data to use to refresh the node.</param>
+        void RefreshNode(string path, TreeViewNode description);
+
         /// <summary>Moves the specified node up 1 position.</summary>
         /// <param name="nodePath">The path of the node to move.</param>
         void MoveUp(string nodePath);
@@ -71,6 +76,10 @@ namespace UserInterface.Interfaces
         /// <param name="position">The position.</param>
         void AddChild(string parentNodePath, TreeViewNode nodeDescription, int position = -1);
 
+        /// <summary>Return the position of the node under its parent</summary>
+        /// <param name="path">The full node path.</param>
+        public int GetNodePosition(string path);
+
         /// <summary>
         /// Returns tree nodes which are expanded.
         /// </summary>
@@ -87,7 +96,8 @@ namespace UserInterface.Interfaces
         /// Expands all child nodes recursively.
         /// </summary>
         /// <param name="path">Path to the node. e.g. ".Simulations.DataStore"</param>
-        void ExpandChildren(string path);
+        /// <param name="recursive">Expand all children/descendants as well?</param>
+        void ExpandChildren(string path, bool recursive = true);
 
         /// <summary>
         /// Collapses all child nodes recursively.
@@ -119,61 +129,6 @@ namespace UserInterface.Interfaces
 
         /// <summary>Determines whether this node's font is strikethrough</summary>
         public bool Strikethrough;
-    }
-
-    /// <summary>A class for holding info about a node selection event.</summary>
-    public class NodeSelectedArgs : EventArgs
-    {
-        /// <summary>The old node path</summary>
-        public string OldNodePath;
-        /// <summary>The new node path</summary>
-        public string NewNodePath;
-    }
-
-    /// <summary>A clas for holding info about a node rename event.</summary>
-    public class NodeRenameArgs : EventArgs
-    {
-        /// <summary>The node path</summary>
-        public string NodePath;
-        /// <summary>The new name</summary>
-        public string NewName;
-        /// <summary>The cancel edit</summary>
-        public bool CancelEdit;
-    }
-
-    /// <summary>A class for holding info about a begin drag event.</summary>
-    public class DragStartArgs : EventArgs
-    {
-        /// <summary>The node path</summary>
-        public string NodePath;
-        /// <summary>The drag object</summary>
-        public ISerializable DragObject;
-    }
-
-    /// <summary>A class for holding info about a begin drag event.</summary>
-    public class AllowDropArgs : EventArgs
-    {
-        /// <summary>The node path</summary>
-        public string NodePath;
-        /// <summary>The drag object</summary>
-        public ISerializable DragObject;
-        /// <summary>The allow</summary>
-        public bool Allow;
-    }
-
-    /// <summary>A class for holding info about a begin drag event.</summary>
-    public class DropArgs : EventArgs
-    {
-        /// <summary>The node path</summary>
-        public string NodePath;
-        /// <summary>The copied</summary>
-        public bool Copied;
-        /// <summary>The moved</summary>
-        public bool Moved;
-        /// <summary>The linked</summary>
-        public bool Linked;
-        /// <summary>The drag object</summary>
-        public ISerializable DragObject;
     }
 
 }

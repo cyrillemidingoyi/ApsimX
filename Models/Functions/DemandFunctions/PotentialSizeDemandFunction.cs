@@ -1,21 +1,17 @@
-﻿using Models.Core;
+﻿using System;
+using Models.Core;
 using Models.PMF.Phen;
-using System;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Potential size demand function
-    /// </summary>
+    /// <summary>Demand is calculated from the product of potential growth increment, organ number and thermal time.</summary>
     [Serializable]
-    [Description("Demand is calculated from the product of potential growth increment, organ number and thermal time.")]
     public class PotentialSizeDemandFunction : Model, IFunction
     {
         private int startStageIndex;
 
         private int endStageIndex;
-        
+
         /// <summary>The start stage name</summary>
         public string StartStageName = "";
 
@@ -54,7 +50,7 @@ namespace Models.Functions.DemandFunctions
         /// <value>The value.</value>
         public double Value(int arrayIndex = -1)
         {
-                if (Phenology.Between(startStageIndex, endStageIndex))
+            if (Phenology.Between(startStageIndex, endStageIndex))
                 return PotentialGrowthIncrement.Value(arrayIndex) * OrganNumber.Value(arrayIndex) * ThermalTime.Value(arrayIndex);
             else
                 return 0;

@@ -1,14 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Data;
 using System.Linq;
-using System.Text;
+using System.Collections.Generic;
 using Models.Core;
 using Newtonsoft.Json;
-using Models.Interfaces;
-using APSIM.Shared.Utilities;
-using Models.Soils.Arbitrator;
-using Models.Zones;
 
 namespace Models.Agroforestry
 {
@@ -19,11 +13,11 @@ namespace Models.Agroforestry
     /// 
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Simulation))]
     [ValidParent(ParentType = typeof(Zone))]
-    public class AgroforestrySystem : Zone, ICustomDocumentation
+    public class AgroforestrySystem : Zone
     {
 
         /// <summary>
@@ -139,22 +133,6 @@ namespace Models.Agroforestry
             else
                     return 1.0;
 
-        }
-
-        /// <summary>Writes documentation for this cultivar by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public override void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // write description of this class.
-                AutoDocumentation.DocumentModelSummary(this, tags, headingLevel, indent, false);
-
-                tree = this.FindChild<TreeProxy>();
-                AutoDocumentation.DocumentModel(tree, tags, headingLevel, indent);
-            }
         }
     }
 }

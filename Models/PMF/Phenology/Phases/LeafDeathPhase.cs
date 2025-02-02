@@ -1,19 +1,17 @@
 using System;
 using Models.Core;
 using Models.PMF.Organs;
-using Newtonsoft.Json;
 using Models.PMF.Struct;
-using System.IO;
-using Models.Functions;
-
+using Newtonsoft.Json;
 
 namespace Models.PMF.Phen
 {
     /// <summary>
-    /// It proceeds until the last leaf on the main-stem has fully senessced.  Therefore its duration depends on the number of main-stem leaves that are produced and the rate at which they seness following final leaf appearance.
+    /// This phase goes from the specified start stage to the specified end stage,
+    /// which occurs when all leaves have fully senesced.
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
     public class LeafDeathPhase : Model, IPhase
@@ -35,7 +33,7 @@ namespace Models.PMF.Phen
 
         //5. Public properties
         //-----------------------------------------------------------------------------------------------------------------
-  
+
         /// <summary>The start</summary>
         [Description("Start")]
         public string Start { get; set; }
@@ -43,6 +41,10 @@ namespace Models.PMF.Phen
         /// <summary>The end</summary>
         [Description("End")]
         public string End { get; set; }
+
+        /// <summary>Is the phase emerged from the ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
 
         /// <summary>Return a fraction of phase complete.</summary>
         [JsonIgnore]
@@ -85,13 +87,13 @@ namespace Models.PMF.Phen
             DeadNodeNoAtStart = 0;
             First = true;
         }
-          
+
         /// <summary>Called when [simulation commencing].</summary>
         [EventSubscribe("Commencing")]
         private void OnSimulationCommencing(object sender, EventArgs e)
-        { ResetPhase(); }
+        {
+            ResetPhase();
+        }
+
     }
 }
-
-      
-      

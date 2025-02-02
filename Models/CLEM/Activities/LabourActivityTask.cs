@@ -1,40 +1,27 @@
 ﻿using Models.Core;
 using Models.CLEM.Resources;
+using Models.CLEM.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Newtonsoft.Json;
-using Models.CLEM;
-using Models.CLEM.Groupings;
-using System.ComponentModel.DataAnnotations;
 using Models.Core.Attributes;
+using System.Linq;
 
 namespace Models.CLEM.Activities
 {
     /// <summary>Labour activity task</summary>
     /// <summary>Defines a labour activity task with associated costs</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(CLEMActivityBase))]
     [ValidParent(ParentType = typeof(ActivitiesHolder))]
     [ValidParent(ParentType = typeof(ActivityFolder))]
-    [Description("This activity will arange payment for a task based on the labour specified in the labour requirement.")]
+    [Description("Arrange payment for a task based on the labour specified in the labour requirement")]
     [HelpUri(@"Content/Features/Activities/Labour/LabourTask.htm")]
     [Version(1, 0, 1, "")]
-    public class LabourActivityTask : CLEMActivityBase, IValidatableObject
+    public class LabourActivityTask : CLEMActivityBase, IHandlesActivityCompanionModels
     {
-        /// <summary>
-        /// Validate object
-        /// </summary>
-        /// <param name="validationContext"></param>
-        /// <returns></returns>
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-        {
-            var results = new List<ValidationResult>();
-            return results;
-        }
+        private double amountToSkip = 0;
 
         /// <summary>
         /// Constructor
@@ -44,95 +31,66 @@ namespace Models.CLEM.Activities
             this.SetDefaults();
         }
 
-        /// <summary>
-        /// Method to determine resources required for this activity in the current month
-        /// </summary>
-        /// <returns>List of required resource requests</returns>
-        public override List<ResourceRequest> GetResourcesNeededForActivity()
+        /// <inheritdoc/>
+        public override LabelsForCompanionModels DefineCompanionModelLabels(string type)
         {
-            List<ResourceRequest> resourcesNeeded = null;
-            return resourcesNeeded;
-        }
-
-        /// <summary>
-        /// Method used to perform activity if it can occur as soon as resources are available.
-        /// </summary>
-        public override void DoActivity()
-        {
-            return;
-        }
-
-        /// <summary>
-        /// Determine the labour required for this activity based on LabourRequired items in tree
-        /// </summary>
-        /// <param name="requirement">Labour requirement model</param>
-        /// <returns></returns>
-        public override double GetDaysLabourRequired(LabourRequirement requirement)
-        {
-            // get all days required as fixed only option from requirement
-            switch (requirement.UnitType)
+            switch (type)
             {
-                case LabourUnitType.Fixed:
-                    return requirement.LabourPerUnit;
+                case "LabourRequirement":
+                    return new LabelsForCompanionModels(
+                        identifiers: new List<string>(),
+                        measures: new List<string>() {
+                            "fixed"
+                        }
+                        );
                 default:
-                    throw new Exception(String.Format("LabourUnitType {0} is not supported for {1} in {2}", requirement.UnitType, requirement.Name, this.Name));
+                    return new LabelsForCompanionModels();
             }
         }
 
-        /// <summary>
-        /// The method allows the activity to adjust resources requested based on shortfalls (e.g. labour) before they are taken from the pools
-        /// </summary>
-        public override void AdjustResourcesNeededForActivity()
+        /// <inheritdoc/>
+        public override List<ResourceRequest> RequestResourcesForTimestep(double argument = 0)
         {
-            return;
-        }
+            amountToSkip = 0;
 
-        /// <summary>
-        /// Method to determine resources required for initialisation of this activity
-        /// </summary>
-        /// <returns></returns>
-        public override List<ResourceRequest> GetResourcesNeededForinitialisation()
-        {
+            // provide updated measure for companion models
+            foreach (var valueToSupply in valuesForCompanionModels)
+            {
+                switch (valueToSupply.Key.unit)
+                {
+                    case "fixed":
+                        valuesForCompanionModels[valueToSupply.Key] = 1;
+                        break;
+                    default:
+                        throw new NotImplementedException(UnknownUnitsErrorText(this, valueToSupply.Key));
+                }
+            }
             return null;
         }
 
-        /// <summary>
-        /// Resource shortfall event handler
-        /// </summary>
-        public override event EventHandler ResourceShortfallOccurred;
 
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnShortfallOccurred(EventArgs e)
+        /// <inheritdoc/>
+        protected override void AdjustResourcesForTimestep()
         {
-            ResourceShortfallOccurred?.Invoke(this, e);
+            IEnumerable<ResourceRequest> shortfalls = MinimumShortfallProportion();
+            if (shortfalls.Any())
+            {
+                // find shortfall by identifiers as these may have different influence on outcome
+                var tagsShort = shortfalls.Where(a => a.CompanionModelDetails.identifier == "").FirstOrDefault();
+                //if (tagsShort != null)
+                amountToSkip = (1 - tagsShort.Available / tagsShort.Required);
+            }
         }
 
-        /// <summary>
-        /// Resource shortfall occured event handler
-        /// </summary>
-        public override event EventHandler ActivityPerformed;
-
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnActivityPerformed(EventArgs e)
+        /// <inheritdoc/>
+        public override void PerformTasksForTimestep(double argument = 0)
         {
-            ActivityPerformed?.Invoke(this, e);
+            if (ResourceRequestList.Any())
+            {
+                SetStatusSuccessOrPartial(amountToSkip > 0);
+            }
         }
 
-        /// <summary>
-        /// Provides the description of the model settings for summary (GetFullSummary)
-        /// </summary>
-        /// <param name="formatForParentControl">Use full verbose description</param>
-        /// <returns></returns>
-        public override string ModelSummary(bool formatForParentControl)
-        {
-            string html = "";
-            return html;
-        }
+
     }
 }

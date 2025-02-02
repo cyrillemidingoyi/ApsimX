@@ -1,20 +1,19 @@
 ﻿using System;
-using System.Collections.Generic;
 using Models.Core;
-using Models.Functions;
-using System.IO;
+using Models.Management;
 using Newtonsoft.Json;
 
 namespace Models.PMF.Phen
 {
     /// <summary>
-    /// A special phase that jumps to another phase.
+    /// When the specified start phase is reached, phenology is rewound to
+    /// a specified phase.
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
-    public class GotoPhase : Model, IPhase, ICustomDocumentation
+    public class GotoPhase : Model, IPhase
     {
         // 1. Links
         //----------------------------------------------------------------------------------------------------------------
@@ -29,21 +28,45 @@ namespace Models.PMF.Phen
         [Description("Start")]
         public string Start { get; set; }
 
-        /// <summary>The end</summary>
-        [Description("End")]
-        public string End { get; set; }
+        /// <summary>The end stage name.</summary>
+        public string End
+        {
+            get
+            {
+                if (phenology == null)
+                    phenology = FindInScope<Phenology>();
+                return phenology.FindChild<IPhase>(PhaseNameToGoto)?.Start;
+            }
+        }
+        /// <summary>Is the phase emerged from the 
+        /// ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
 
         /// <summary>The phase name to goto</summary>
         [Description("PhaseNameToGoto")]
+        [Display(Type = DisplayType.CropPhaseName)]
         public string PhaseNameToGoto { get; set; }
+
+        /// <summary>
+        /// The type of biomass removal event
+        /// </summary>
+        [Description("Type of biomass removal.  This triggers events OnCutting, OnGrazing etc")]
+        public BiomassRemovalType RemovalType
+        {
+            get { return _removalType; }
+            set { _removalType = value; }
+        }
+
+        [JsonIgnore]
+        private BiomassRemovalType _removalType { get; set; }
 
         /// <summary>Gets the fraction complete.</summary>
         [JsonIgnore]
-        public double FractionComplete { get;}
+        public double FractionComplete { get; }
 
-        /// <summary>Thermal time target</summary>
-        [JsonIgnore]
-        public double Target { get; set; }
+        /// <summary>Cutting Event</summary>
+        public event EventHandler<BiomassRemovalEventArgs> PhenologyDefoliate;
 
         //6. Public methods
         //-----------------------------------------------------------------------------------------------------------------
@@ -51,32 +74,14 @@ namespace Models.PMF.Phen
         /// <summary>Should not be called in this class</summary>
         public bool DoTimeStep(ref double PropOfDayToUse)
         {
-            PropOfDayToUse = 0;
-            phenology.SetToStage((double)phenology.IndexFromPhaseName(PhaseNameToGoto)+1);
-            return false;
+            phenology.SetToStage((double)phenology.IndexFromPhaseName(PhaseNameToGoto) + 1);
+            BiomassRemovalEventArgs breg = new BiomassRemovalEventArgs();
+            breg.RemovalType = RemovalType;
+            PhenologyDefoliate?.Invoke(this, breg);
+            return true;
         }
 
         /// <summary>Resets the phase.</summary>
-        public virtual void ResetPhase() {}
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name + " Phase", headingLevel));
-
-                // Describe the start and end stages
-                tags.Add(new AutoDocumentation.Paragraph("This is a special phase, at " + Start + " the phenology is reset to the " + PhaseNameToGoto + " phase.  ", indent));
-
-                // write memos.
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, headingLevel + 1, indent);
-            }
-        }
+        public virtual void ResetPhase() { }
     }
 }

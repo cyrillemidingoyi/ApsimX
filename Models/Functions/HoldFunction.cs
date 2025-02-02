@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using Models.Core;
 using Models.PMF.Phen;
 
@@ -11,15 +9,16 @@ namespace Models.Functions
     /// </summary>
     [Serializable]
     [Description("Returns the ValueToHold which is updated daily until the WhenToHold stage is reached, beyond which it is held constant")]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    public class HoldFunction : Model, IFunction, ICustomDocumentation
+    public class HoldFunction : Model, IFunction
     {
         /// <summary>The _ value</summary>
         private double _Value = 0;
 
         /// <summary>The set event</summary>
         [Description("Phenological stage at which value stops updating and is held constant")]
+        [Display(Type = DisplayType.CropStageName)]
         public string WhenToHold { get; set; }
 
         /// <summary>The value to hold after event</summary>
@@ -59,40 +58,11 @@ namespace Models.Functions
         {
             return _Value;
         }
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-                // Describe the function
-                if (ValueToHold != null)
-                {
-                    tags.Add(new AutoDocumentation.Paragraph(Name + " is the same as " + (ValueToHold as IModel).Name + " until it reaches " + WhenToHold + " stage when it fixes its value", indent));
-                }
-                // write children.
-                foreach (IModel child in this.FindAllChildren<IModel>())
-                    AutoDocumentation.DocumentModel(child, tags, headingLevel + 1, indent + 1);
-            }
-        }
 
         /// <summary>Get value</summary>
         private void GetValue()
         {
-            try
-            {
-                _Value = ValueToHold.Value();
-            }
-            catch (Exception)
-            {
-
-            }
+            _Value = ValueToHold.Value();
         }
-
     }
-
 }

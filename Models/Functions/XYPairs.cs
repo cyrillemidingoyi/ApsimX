@@ -1,29 +1,33 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using Models.Core;
-using System.Xml;
 using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Interfaces;
+using Models.Utilities;
+using Newtonsoft.Json;
 
 namespace Models.Functions
 {
     /// <summary>
-    /// Returns a y value from the specified xy matrix corresponding to the current value of the Xproperty
+    /// This function is calculated from an XY matrix which returns a value for Y 
+    /// interpolated from the Xvalue provided.
     /// </summary>
     [Serializable]
     [ViewName("UserInterface.Views.XYPairsView")]
     [PresenterName("UserInterface.Presenters.XYPairsPresenter")]
-    [Description("Returns a y value from the specified xy maxrix corresponding to the current value of the Xproperty")]
+    [Description("Returns the corresponding Y value for a given X value, based on the line shape defined by the specified XY matrix.")]
     public class XYPairs : Model, IFunction, IIndexedFunction
     {
         /// <summary>Gets or sets the x.</summary>
-        /// <value>The x.</value>
         [Description("X")]
+        [Display]
         public double[] X { get; set; }
+
         /// <summary>Gets or sets the y.</summary>
-        /// <value>The y.</value>
         [Description("Y")]
+        [Display]
         public double[] Y { get; set; }
+
 
         /// <summary>Gets the value.</summary>
         /// <value>The value.</value>

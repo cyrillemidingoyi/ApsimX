@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Models.Core;
 
 namespace Models.Optimisation
 {
@@ -23,6 +19,7 @@ namespace Models.Optimisation
         /// <summary>
         /// Log transformation of concentrated version of weighted sum of squares.
         /// </summary>
+        [Description("Log transformation of concentrated weighted sum of squares")]
         CritLogCwss,
 
         /// <summary>
@@ -30,6 +27,7 @@ namespace Models.Optimisation
         /// squares with hypothesis of high correlation between errors for
         /// different measurements over time.
         /// </summary>
+        [Description("Log transformation of concentrated weighted sum of squares, with hypothesis of high correlation between errors for different measurements over time")]
         CritLogCwssCorr,
     }
 }

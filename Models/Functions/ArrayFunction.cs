@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Linq;
 using Models.Core;
 
 namespace Models.Functions
@@ -8,9 +8,9 @@ namespace Models.Functions
     /// Returns the value at the given index. If the index is outside the array, the last value will be returned.
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    public class ArrayFunction : Model, IFunction, ICustomDocumentation
+    public class ArrayFunction : Model, IFunction
     {
         /// <summary>Gets the value.</summary>
         [Description("The values of the array (space seperated)")]
@@ -20,7 +20,8 @@ namespace Models.Functions
         [Description("The optional units of the array")]
         public string Units { get; set; }
 
-        private List<double> str2dbl = new List<double>();
+        /// <summary>Double values.</summary>
+        public double[] Doubles { get; set; }
 
         /// <summary>Gets the value of the function.</summary>
         public double Value(int arrayIndex = -1)
@@ -28,53 +29,21 @@ namespace Models.Functions
             if (arrayIndex == -1)
                 throw new ApsimXException(this, "ArrayFunction must have an index to return.");
 
-            if (str2dbl.Count == 0)
+            if (Doubles == null && !string.IsNullOrEmpty(Values))
             {
-                string[] split = Values.Split(' ');
-                foreach (string s in split)
-                    try
-                    {
-                        str2dbl.Add(Convert.ToDouble(s, System.Globalization.CultureInfo.InvariantCulture));
-                    }
-                    catch (Exception)
-                    {
-                        throw new ApsimXException(this, "ArrayFunction: Could not convert " + s + " to a number.");
-                    }
+                Doubles = Values.Split(' ')
+                                       .Select(s => Convert.ToDouble(s, System.Globalization.CultureInfo.InvariantCulture))
+                                       .ToArray();
+                Values = null;
             }
 
-            if (arrayIndex > str2dbl.Count - 1)
-                return str2dbl[str2dbl.Count - 1];
+            if (Doubles == null)
+                throw new Exception($"Must specify values in ArrayFunction {Name}");
 
-            return str2dbl[arrayIndex];
-        }
+            if (arrayIndex > Doubles.Length - 1)
+                return Doubles[Doubles.Length - 1];
 
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            // get description and units.
-            string description = AutoDocumentation.GetDescription(Parent, Name);
-            string units = Units;
-            if (units == null)
-                units = AutoDocumentation.GetUnits(Parent, Name);
-            if (units != string.Empty)
-                units = " (" + units + ")";
-
-            if (!(Parent is IFunction) && headingLevel > 0)
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-
-            //TODO: Tidy up the printing -JF
-            tags.Add(new AutoDocumentation.Paragraph("<i>" + Name + " = " + Values + units + "</i>", indent));
-
-            if (!String.IsNullOrEmpty(description))
-                tags.Add(new AutoDocumentation.Paragraph(description, indent));
-
-            // write memos.
-            foreach (IModel memo in this.FindAllChildren<Memo>())
-                AutoDocumentation.DocumentModel(memo, tags, headingLevel + 1, indent);
-
+            return Doubles[arrayIndex];
         }
     }
 }

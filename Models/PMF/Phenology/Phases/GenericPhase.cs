@@ -1,18 +1,18 @@
 ﻿using System;
-using System.Collections.Generic;
 using Models.Core;
 using Models.Functions;
-using System.IO;
 using Newtonsoft.Json;
 
 namespace Models.PMF.Phen
 {
-    /// <summary>Describe the phenological development through a generic phase.</summary>
+    /// <summary>
+    /// The phase goes from the a start stage to and end stage. The class requires a target and a progression function.
+    /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
-    public class GenericPhase : Model, IPhase, IPhaseWithTarget, ICustomDocumentation
+    public class GenericPhase : Model, IPhase, IPhaseWithTarget
     {
         // 1. Links
         //----------------------------------------------------------------------------------------------------------------
@@ -33,6 +33,10 @@ namespace Models.PMF.Phen
         /// <summary>The phenological stage at the end of this phase.</summary>
         [Description("End")]
         public string End { get; set; }
+
+        /// <summary>Is the phase emerged from the ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
 
         /// <summary>Fraction of phase that is complete (0-1).</summary>
         [JsonIgnore]
@@ -57,6 +61,7 @@ namespace Models.PMF.Phen
 
         /// <summary>Thermal time target to end this phase.</summary>
         [JsonIgnore]
+        [Units("oD")]
         public double Target { get { return target.Value(); } }
 
         // 3. Public methods
@@ -66,26 +71,33 @@ namespace Models.PMF.Phen
         public bool DoTimeStep(ref double propOfDayToUse)
         {
             bool proceedToNextPhase = false;
-            ProgressionForTimeStep = progression.Value() * propOfDayToUse;
-            ProgressThroughPhase += ProgressionForTimeStep;
 
-            if (ProgressThroughPhase > Target)
+            if (ProgressThroughPhase >= Target)
             {
-                if (ProgressionForTimeStep > 0.0)
-                {
-                    proceedToNextPhase = true;
-                    propOfDayToUse *= (ProgressThroughPhase - Target) / ProgressionForTimeStep;
-                    ProgressionForTimeStep *= (1 - propOfDayToUse);
-                }
-                ProgressThroughPhase = Target;
+                // We have entered this timestep after Target decrease below progress so exit without doing anything
+                proceedToNextPhase = true;
             }
-            
+            else
+            {
+                ProgressionForTimeStep = progression.Value() * propOfDayToUse;
+                ProgressThroughPhase += ProgressionForTimeStep;
+
+                if (ProgressThroughPhase > Target)
+                {
+                    if (ProgressionForTimeStep > 0.0)
+                    {
+                        proceedToNextPhase = true;
+                        propOfDayToUse *= (ProgressThroughPhase - Target) / ProgressionForTimeStep;
+                        ProgressionForTimeStep *= (1 - propOfDayToUse);
+                    }
+                    ProgressThroughPhase = Target;
+                }
+            }
             return proceedToNextPhase;
         }
 
         /// <summary>Resets the phase.</summary>
         public void ResetPhase() { ProgressThroughPhase = 0.0; }
-
 
         // 4. Private method
         //-----------------------------------------------------------------------------------------------------------------
@@ -96,37 +108,8 @@ namespace Models.PMF.Phen
         {
             ResetPhase();
         }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading
-                tags.Add(new AutoDocumentation.Heading(Name + " Phase", headingLevel));
-
-                // write description of this class
-                tags.Add(new AutoDocumentation.Paragraph("This <i>phase</i> goes from " + Start + " to " + End + ". It uses a <i>Target</i> "
-                    + "to determine the duration between development <i>Stages</i>.  Daily <i>progress</i> is accumulated until the <i>Target</i> is "
-                    + "met and remaining fraction of the day is forwarded to the next phase.", indent));
-
-                // write memos
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, headingLevel + 1, indent);
-
-                // write intro to children
-                tags.Add(new AutoDocumentation.Paragraph(" The <i>Target</i> and the daily <i>Progression</i> toward " + End + " are described as follow:", indent));
-
-                // write children
-                foreach (IModel child in this.FindAllChildren<IFunction>())
-                    AutoDocumentation.DocumentModel(child, tags, headingLevel + 1, indent);
-            }
-        }
     }
 }
 
-      
-      
+
+

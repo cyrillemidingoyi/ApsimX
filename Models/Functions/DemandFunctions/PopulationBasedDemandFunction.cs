@@ -1,17 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using Models.Core;
 using Models.PMF;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Demand is calculated from the product of growth rate, thermal time and population.
-    /// </summary>
+    /// <summary>Demand is calculated from the product of growth rate, thermal time and population.</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     public class PopulationBasedDemandFunction : Model, IFunction
     {
@@ -46,7 +41,7 @@ namespace Models.Functions.DemandFunctions
         /// <summary>The growth duration</summary>
         [Description("ThermalTime duration of organ growth ")]
         [Link(Type = LinkType.Child, ByName = true)]
-        [Units("<sup>o</sup>Cd")]
+        [Units("^o^Cd")]
         IFunction GrowthDuration = null;
 
         /// <summary>The accumulated thermal time</summary>
@@ -85,7 +80,7 @@ namespace Models.Functions.DemandFunctions
 
             return Value * ExpansionStress.Value(arrayIndex);
         }
-        
+
         [EventSubscribe("PlantSowing")]
         private void OnPlantSowing(object sender, SowingParameters data)
         {

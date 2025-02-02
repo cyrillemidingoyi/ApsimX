@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using Models.Core;
-using System.IO;
 using System.Linq;
+using Models.Core;
 
 namespace Models.Functions
 {
@@ -12,7 +10,7 @@ namespace Models.Functions
     /// </summary>
     [Serializable]
     [Description("A value is chosen according to the current growth phase.")]
-    public class PhaseLookup : Model, IFunction, ICustomDocumentation
+    public class PhaseLookup : Model, IFunction
     {
         /// <summary>The child functions</summary>
         private IEnumerable<IFunction> ChildFunctions;
@@ -32,30 +30,5 @@ namespace Models.Functions
             }
             return 0;  // Default value is zero
         }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-
-                // write memos.
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, headingLevel+1, indent);
-
-                // write children.
-                foreach (IModel child in this.FindAllChildren<IFunction>())
-                    AutoDocumentation.DocumentModel(child, tags, headingLevel+1, indent + 1);
-
-                tags.Add(new AutoDocumentation.Paragraph(this.Name + " has a value of zero for phases not specified above ", indent + 1));
-            }
-        }
     }
 }
-
-

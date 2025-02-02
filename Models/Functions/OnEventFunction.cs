@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using Models.Core;
 using Models.PMF.Phen;
 
@@ -10,9 +8,9 @@ namespace Models.Functions
     /// Returns the a value depending on whether an event has occurred.
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    public class OnEventFunction : Model, IFunction, ICustomDocumentation
+    public class OnEventFunction : Model, IFunction
     {
         /// <summary>The _ value</summary>
         private double _Value = 0;
@@ -23,7 +21,7 @@ namespace Models.Functions
 
         /// <summary>The re set event</summary>
         [Description("(optional) The event resets to pre event value")]
-        public string ReSetEvent {get; set;}
+        public string ReSetEvent { get; set; }
 
 
         /// <summary>The pre event value</summary>
@@ -36,8 +34,8 @@ namespace Models.Functions
         /// <summary>Called when [simulation commencing].</summary>
         /// <param name="sender">The sender.</param>
         /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
-        [EventSubscribe("Commencing")]
-        private void OnSimulationCommencing(object sender, EventArgs e)
+        [EventSubscribe("Sowing")]
+        private void OnSowing(object sender, EventArgs e)
         {
             _Value = PreEventValue.Value();
         }
@@ -61,41 +59,11 @@ namespace Models.Functions
         {
             _Value = PreEventValue.Value();
         }
-            /// <summary>Gets the value.</summary>
-            public double Value(int arrayIndex = -1)
+
+        /// <summary>Gets the value.</summary>
+        public double Value(int arrayIndex = -1)
         {
             return _Value;
         }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-
-                // write memos.
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, -1, indent);
-
-                if (PreEventValue != null)
-                {
-                    tags.Add(new AutoDocumentation.Paragraph("Before " + SetEvent, indent));
-                    AutoDocumentation.DocumentModel(PreEventValue as IModel, tags, headingLevel + 1, indent + 1);
-                }
-
-                if (PostEventValue != null)
-                {
-                    tags.Add(new AutoDocumentation.Paragraph("On " + SetEvent + " the value is set to:", indent));
-                    AutoDocumentation.DocumentModel(PostEventValue as IModel, tags, headingLevel + 1, indent + 1);
-                }
-            }
-        }
-
     }
-
 }

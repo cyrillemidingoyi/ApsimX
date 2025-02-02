@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Reflection;
+using System.Linq;
+using APSIM.Shared.Utilities;
 using Models.Core;
 using Models.PMF.Phen;
-using APSIM.Shared.Utilities;
-using System.Linq;
 
 namespace Models.Functions
 {
@@ -14,9 +12,9 @@ namespace Models.Functions
     /// </summary>
     [Serializable]
     [Description("Maintains a moving average of a given value for a user-specified number of simulation days")]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    public class MovingAverageFunction : Model, IFunction, ICustomDocumentation
+    public class MovingAverageFunction : Model, IFunction
     {
         /// <summary>The number of days over which to calculate the moving average</summary>
         [Description("Number of Days")]
@@ -24,6 +22,7 @@ namespace Models.Functions
 
         /// <summary>The stage to start calculating moving average</summary>
         [Description("The stage to start calculating moving average")]
+        [Display(Type = DisplayType.CropStageName)]
         public string StageToStartMovingAverage { get; set; }
 
 
@@ -60,7 +59,7 @@ namespace Models.Functions
         {
             AccumulatedValues.Clear();
             Calculate = false;
-            
+
         }
 
         /// <summary>Called when [phase changed].</summary>
@@ -72,6 +71,7 @@ namespace Models.Functions
             //Put the first data member into the list on the day that moving average is to start being calculated
             if (phaseChange.StageName == StageToStartMovingAverage)
             {
+                AccumulatedValues.Clear();
                 AccumulatedValues.Add(ChildFunction.Value());
                 InitialisedToday = true;
                 Calculate = true;
@@ -101,26 +101,6 @@ namespace Models.Functions
             if (NumberOfDays == 0)
                 throw new ApsimXException(this, "Number of days for moving average cannot be zero in function " + this.Name);
             return MathUtilities.Average(AccumulatedValues);
-        }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                Name = this.Name;
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-                if (this.FindAllChildren<IFunction>().Count() ==1)
-                    tags.Add(new AutoDocumentation.Paragraph(Name + " is calculated from a moving average of " + (ChildFunction as IModel).Name + " over a series of " + NumberOfDays.ToString() + " days.", indent));
-
-                // write children.
-                foreach (IModel child in this.FindAllChildren<IModel>())
-                    AutoDocumentation.DocumentModel(child, tags, headingLevel + 1, indent + 1);
-            }
         }
     }
 }

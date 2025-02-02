@@ -1,26 +1,27 @@
+using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Interfaces;
+using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+
 namespace Models.Climate
 {
-    using APSIM.Shared.Utilities;
-    using Models.Core;
-    using Models.Interfaces;
-    using Newtonsoft.Json;
-    using System;
-    using System.Diagnostics.CodeAnalysis;
 
     ///<summary>
     /// Reads in controlled environment weather data and makes it available to models.
     ///</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    [ValidParent(ParentType=typeof(Simulation))]
+    [ValidParent(ParentType = typeof(Simulation))]
     public class ControlledEnvironment : Model, IWeather
     {
         /// <summary>
         /// A link to the clock model.
         /// </summary>
         [Link]
-        private Clock clock = null;
+        private IClock clock = null;
         /// <summary>
         /// Gets the start date of the weather file
         /// </summary>
@@ -29,7 +30,7 @@ namespace Models.Climate
         /// <summary>
         /// Gets the end date of the weather file
         /// </summary>
-        public DateTime EndDate { get { return clock.EndDate;}}
+        public DateTime EndDate { get { return clock.EndDate; } }
 
         /// <summary>
         /// This event will be invoked immediately before models get their weather data.
@@ -57,7 +58,13 @@ namespace Models.Climate
         /// </summary>
         [Units("°C")]
         [JsonIgnore]
-        public double MeanT { get { return (MaxT + MinT) / 2; } }
+        public double MeanT { get { return MathUtilities.Average(SubDailyTemperature); } }
+
+        /// <summary>
+        /// Hourly temperature values assuming t = Tmin when dark and t=Tmax when light (oC)
+        /// </summary>
+        [JsonIgnore]
+        public double[] SubDailyTemperature = null;
 
         /// <summary>
         /// Daily mean VPD (hPa)
@@ -92,7 +99,7 @@ namespace Models.Climate
         [Description("Solar Radiation")]
         [Units("MJ/m2/d")]
         public double Radn { get; set; }
-		
+
         /// <summary>
         /// Gets or sets the Pan Evaporation (mm) (Class A pan)
         /// </summary>
@@ -129,11 +136,18 @@ namespace Models.Climate
         public double AirPressure { get; set; }
 
         /// <summary>
+        /// Gets or sets the diffuse radiation fraction. If not specified in the weather file the default is 1.
+        /// </summary>
+        [Description("Diffuse Fraction")]
+        [Units("0-1")]
+        public double DiffuseFraction { get; set; }
+
+        /// <summary>
         /// Gets the latitude
         /// </summary>
         [Description("Latitude")]
         [Units("°")]
-        public double Latitude{ get; set; }
+        public double Latitude { get; set; }
 
         /// <summary>Gets the longitude</summary>
         [Description("Longitude")]
@@ -143,19 +157,24 @@ namespace Models.Climate
         /// <summary>
         /// Gets the average temperature
         /// </summary>
-        public double Tav { get { return (this.MinT + this.MaxT)/2; }}
+        public double Tav { get { return (this.MinT + this.MaxT) / 2; } }
 
         /// <summary>
         /// Gets the temperature amplitude.
         /// </summary>
-        public double Amp { get {return 0;}}
+        public double Amp { get { return 0; } }
+
+        /// <summary>
+        /// Gets the temperature amplitude.
+        /// </summary>
+        public string FileName { get { return "Controlled Environment does not read from a file"; } }
 
         /// <summary>
         /// Gets the duration of the day in hours.
         /// </summary>
         [Description("Day Length")]
         [Units("h")]
-        public double DayLength {get; set;}
+        public double DayLength { get; set; }
 
         /// <summary>
         /// Calculate daylength using a given twilight angle
@@ -175,6 +194,13 @@ namespace Models.Climate
         public double SunRise { get; set; }
 
         /// <summary>
+        /// Number of hours after sun up we switch from Min to Max temp.
+        /// </summary>
+        [Description("Hours after sunrise to switch from Min to Max temp")]
+
+        public double TempLag { get; set; } = 0;
+
+        /// <summary>
         /// Calculate daylength using a given twilight angle
         /// </summary>
         public double CalculateSunRise()
@@ -185,8 +211,8 @@ namespace Models.Climate
         /// <summary>
         /// Gets the duration of the day in hours.
         /// </summary>
-        [Description("The hour of the day for sunset")]
-        public double SunSet { get; set; }
+        [JsonIgnore]
+        public double SunSet { get { return SunRise + DayLength; }}
 
         /// <summary>
         /// Calculate daylength using a given twilight angle
@@ -213,13 +239,35 @@ namespace Models.Climate
         {
             if (this.PreparingNewWeatherData != null)
                 this.PreparingNewWeatherData.Invoke(this, new EventArgs());
+            calculateHourlyTemperature();
             YesterdaysMetData = new DailyMetDataFromFile();
             YesterdaysMetData.Radn = Radn;
             YesterdaysMetData.Rain = Rain;
             YesterdaysMetData.MaxT = MaxT;
             YesterdaysMetData.MinT = MinT;
             YesterdaysMetData.VP = VP;
+            YesterdaysMetData.PanEvap = PanEvap;
             TomorrowsMetData = YesterdaysMetData;
+        }
+
+        /// <summary>Called when a simulation commences.</summary>
+        /// <param name="sender">The sender of the event</param>
+        /// <param name="e">The event data.</param>
+        [EventSubscribe("Commencing")]
+        private void OnSimulationCommencing(object sender, EventArgs e)
+        {
+            SubDailyTemperature = new double[24];
+        }
+
+        private void calculateHourlyTemperature()
+        {
+            for (int i = 0; i < SubDailyTemperature.Length; i++)
+            {
+                if ((i <= SunRise+TempLag) || (i > SunSet))
+                    SubDailyTemperature[i] = MinT;
+                else
+                    SubDailyTemperature[i] = MaxT;
+            }
         }
 
         /// <summary>Met Data from yesterday</summary>

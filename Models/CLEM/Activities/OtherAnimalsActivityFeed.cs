@@ -1,38 +1,43 @@
 ﻿using Models.Core;
 using Models.CLEM.Groupings;
+using Models.CLEM.Interfaces;
 using Models.CLEM.Resources;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Models.Core.Attributes;
+using DocumentFormat.OpenXml.Office.CustomUI;
+using System.Linq;
+using APSIM.Shared.Utilities;
+using Docker.DotNet.Models;
 
 namespace Models.CLEM.Activities
 {
     /// <summary>Other animals feed activity</summary>
     /// <summary>This activity provides food to specified other animals based on a feeding style</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(CLEMActivityBase))]
     [ValidParent(ParentType = typeof(ActivitiesHolder))]
     [ValidParent(ParentType = typeof(ActivityFolder))]
-    [Description("This activity manages the feeding of a specified type of other animal based on a feeding style.")]
+    [Description("Manages the feeding of a specified type of other animal based on a feeding style")]
     [Version(1, 0, 1, "")]
     [HelpUri(@"Content/Features/Activities/OtherAnimals/OtherAnimalsActivityFeed.htm")]
-    public class OtherAnimalsActivityFeed : CLEMActivityBase
+    public class OtherAnimalsActivityFeed : CLEMActivityBase, IHandlesActivityCompanionModels
     {
-        [Link]
-        Clock Clock = null;
+        private IEnumerable<OtherAnimalsGroup> filterGroups;
+        private OtherAnimals otherAnimals;
+        int numberToDo = 0;
+        double amountToDo = 0;
+        double feedEstimated = 0;
 
         /// <summary>
         /// Name of Feed to use
         /// </summary>
         [Description("Feed store to use")]
-        [Models.Core.Display(Type = DisplayType.CLEMResource, CLEMResourceGroups = new Type[] { typeof(AnimalFoodStore) })]
+        [Core.Display(Type = DisplayType.DropDown, Values = "GetResourcesAvailableByName", ValuesArgs = new object[] { new object[] { typeof(AnimalFoodStore) } })]
         [Required(AllowEmptyStrings = false, ErrorMessage = "Feed type to use required")]
         public string FeedTypeName { get; set; }
 
@@ -42,7 +47,7 @@ namespace Models.CLEM.Activities
         [Description("Feeding style to use")]
         [System.ComponentModel.DefaultValueAttribute(OtherAnimalsFeedActivityTypes.SpecifiedDailyAmount)]
         [Required]
-        public OtherAnimalsFeedActivityTypes FeedStyle { get; set; }
+        public OtherAnimalsFeedActivityTypes FeedStyle { get; set; } = OtherAnimalsFeedActivityTypes.SpecifiedDailyAmount;
 
         /// <summary>
         /// Feed type
@@ -51,12 +56,15 @@ namespace Models.CLEM.Activities
         public IFeedType FeedType { get; set; }
 
         /// <summary>
-        /// Constructor
+        /// Provides the redicted other animal name based on filtering 
         /// </summary>
-        public OtherAnimalsActivityFeed()
-        {
-            this.SetDefaults();
-        }
+        public string PredictedAnimalName { get; set; } = "NA";
+
+        /// <summary>
+        /// The list of cohorts remaining to be fed in the current timestep
+        /// </summary>
+        [JsonIgnore]
+        public List<OtherAnimalsTypeCohort> CohortsToBeFed { get; set; }
 
         /// <summary>An event handler to allow us to initialise ourselves.</summary>
         /// <param name="sender">The sender.</param>
@@ -64,160 +72,122 @@ namespace Models.CLEM.Activities
         [EventSubscribe("CLEMInitialiseActivity")]
         private void OnCLEMInitialiseActivity(object sender, EventArgs e)
         {
+            otherAnimals = Resources.FindResourceGroup<OtherAnimals>();
+            filterGroups = GetCompanionModelsByIdentifier<OtherAnimalsFeedGroup>(true, false);
+
             // locate FeedType resource
-            FeedType = Resources.GetResourceItem(this, FeedTypeName, OnMissingResourceActionTypes.ReportErrorAndStop, OnMissingResourceActionTypes.ReportErrorAndStop) as IFeedType;
+            FeedType = Resources.FindResourceType<ResourceBaseWithTransactions, IResourceType>(this, FeedTypeName, OnMissingResourceActionTypes.ReportErrorAndStop, OnMissingResourceActionTypes.ReportErrorAndStop) as IFeedType;
         }
 
-        /// <summary>
-        /// Method to determine resources required for this activity in the current month
-        /// </summary>
-        /// <returns></returns>
-        public override List<ResourceRequest> GetResourcesNeededForActivity()
+        /// <inheritdoc/>
+        public override LabelsForCompanionModels DefineCompanionModelLabels(string type)
         {
-            List<ResourceRequest> resourcesNeeded = new List<ResourceRequest>();
-
-            // get feed required
-            // zero based month index for array
-            int month = Clock.Today.Month - 1;
-            double allIndividuals = 0;
-            double amount = 0;
-            foreach (OtherAnimalsFilterGroup filtergroup in this.FindAllChildren<OtherAnimalsFilterGroup>())
+            switch (type)
             {
-                double total = 0;
-                foreach (OtherAnimalsTypeCohort item in (filtergroup as OtherAnimalsFilterGroup).SelectedOtherAnimalsType.Cohorts.Filter(filtergroup as OtherAnimalsFilterGroup))
-                {
-                    total += item.Number * ((item.Age < (filtergroup as OtherAnimalsFilterGroup).SelectedOtherAnimalsType.AgeWhenAdult)?0.1:1);
-                }
-                allIndividuals += total;
-                switch (FeedStyle)
-                {
-                    case OtherAnimalsFeedActivityTypes.SpecifiedDailyAmount:
-                        amount += (filtergroup as OtherAnimalsFilterGroup).MonthlyValues[month] * 30.4 * total;
-                        break;
-                    case OtherAnimalsFeedActivityTypes.ProportionOfWeight:
-                        throw new NotImplementedException("Proportion of weight is not implemented as a feed style for other animals");
-                    default:
-                        amount += 0;
-                        break;
-                }
+                case "OtherAnimalsFeedGroup":
+                    return new LabelsForCompanionModels(
+                        identifiers: new List<string>(),
+                        measures: new List<string>() { "Feed provided" }
+                        );
+                case "ActivityFee":
+                case "LabourRequirement":
+                    return new LabelsForCompanionModels(
+                        identifiers: new List<string>() {
+                            "Number fed",
+                            "Feed provided"
+                        },
+                        measures: new List<string>() {
+                            "fixed",
+                            "per head",
+                            "per kg feed"
+                        }
+                        );
+                default:
+                    return new LabelsForCompanionModels();
+            }
+        }
 
-                if (amount > 0)
+        /// <inheritdoc/>
+        public override void PrepareForTimestep()
+        {
+            amountToDo = 0;
+            feedEstimated = 0;
+            CohortsToBeFed  = otherAnimals.GetCohorts(filterGroups, false).ToList();
+            foreach (var cohort in CohortsToBeFed)
+            {
+                cohort.Considered = false;
+            }
+        }
+
+        /// <inheritdoc/>
+        public override List<ResourceRequest> RequestResourcesForTimestep(double argument = 0)
+        {
+            Status = ActivityStatus.NotNeeded;
+            feedEstimated = filterGroups.OfType<OtherAnimalsFeedGroup>().Sum(a => a.CurrentResourceRequest.Required);
+
+            foreach (var valueToSupply in valuesForCompanionModels)
+            {
+                int number = numberToDo;
+
+                switch (valueToSupply.Key.type)
                 {
-                    resourcesNeeded.Add(new ResourceRequest()
-                    {
-                        AllowTransmutation = true,
-                        Required = amount,
-                        ResourceType = typeof(AnimalFoodStore),
-                        ResourceTypeName = FeedTypeName,
-                        ActivityModel = this,
-                        Reason = "Feed",
-                        FilterDetails = null
-                    }
-                    );
+                    case "OtherAnimalsFeedGroup":
+                        valuesForCompanionModels[valueToSupply.Key] = feedEstimated;
+                        break;
+                    case "LabourRequirement":
+                    case "ActivityFee":
+                        switch (valueToSupply.Key.identifier)
+                        {
+                            case "Number fed":
+                                switch (valueToSupply.Key.unit)
+                                {
+                                    case "fixed":
+                                        valuesForCompanionModels[valueToSupply.Key] = 1;
+                                        break;
+                                    case "per head":
+                                        valuesForCompanionModels[valueToSupply.Key] = number;
+                                        break;
+                                    default:
+                                        throw new NotImplementedException(UnknownUnitsErrorText(this, valueToSupply.Key));
+                                }
+                                break;
+                            case "Feed provided":
+                                switch (valueToSupply.Key.unit)
+                                {
+                                    case "fixed":
+                                        valuesForCompanionModels[valueToSupply.Key] = 1;
+                                        break;
+                                    case "per kg fed":
+                                        amountToDo = feedEstimated;
+                                        valuesForCompanionModels[valueToSupply.Key] = feedEstimated;
+                                        break;
+                                    default:
+                                        throw new NotImplementedException(UnknownUnitsErrorText(this, valueToSupply.Key));
+                                }
+                                break;
+                            default:
+                                throw new NotImplementedException(UnknownCompanionModelErrorText(this, valueToSupply.Key));
+                        }
+                        break;
+                    default:
+                        throw new NotImplementedException(UnknownCompanionModelErrorText(this, valueToSupply.Key));
                 }
             }
-            return resourcesNeeded;
-        }
-
-        /// <summary>
-        /// Method used to perform activity if it can occur as soon as resources are available.
-        /// </summary>
-        public override void DoActivity()
-        {
-            return;
-        }
-
-        /// <summary>
-        /// Method to determine resources required for initialisation of this activity
-        /// </summary>
-        /// <returns></returns>
-        public override List<ResourceRequest> GetResourcesNeededForinitialisation()
-        {
             return null;
         }
 
-        /// <summary>
-        /// Resource shortfall event handler
-        /// </summary>
-        public override event EventHandler ResourceShortfallOccurred;
-
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnShortfallOccurred(EventArgs e)
+        /// <inheritdoc/>
+        public override void PerformTasksForTimestep(double argument = 0)
         {
-            ResourceShortfallOccurred?.Invoke(this, e);
-        }
-
-        /// <summary>
-        /// Resource shortfall occured event handler
-        /// </summary>
-        public override event EventHandler ActivityPerformed;
-
-        /// <summary>
-        /// Shortfall occurred 
-        /// </summary>
-        /// <param name="e"></param>
-        protected override void OnActivityPerformed(EventArgs e)
-        {
-            ActivityPerformed?.Invoke(this, e);
-        }
-
-        /// <summary>
-        /// Determines how much labour is required from this activity based on the requirement provided
-        /// </summary>
-        /// <param name="requirement">The details of how labour are to be provided</param>
-        /// <returns></returns>
-        public override double GetDaysLabourRequired(LabourRequirement requirement)
-        {
-            double allIndividuals = 0;
-            foreach (OtherAnimalsFilterGroup filtergroup in this.FindAllChildren<OtherAnimalsFilterGroup>())
+            if (feedEstimated > 0)
             {
-                double total = 0;
-                foreach (OtherAnimalsTypeCohort item in (filtergroup as OtherAnimalsFilterGroup).SelectedOtherAnimalsType.Cohorts.Filter(filtergroup as OtherAnimalsFilterGroup))
+                if (feedEstimated - filterGroups.OfType<OtherAnimalsFeedGroup>().Sum(a => a.CurrentResourceRequest.Required) > 0)
                 {
-                    total += item.Number * ((item.Age < (filtergroup as OtherAnimalsFilterGroup).SelectedOtherAnimalsType.AgeWhenAdult) ? 0.1 : 1);
+                    Status = ActivityStatus.Partial;
+                    return;
                 }
-                allIndividuals += total;
+                Status = ActivityStatus.Success;
             }
-
-            double daysNeeded;
-            switch (requirement.UnitType)
-            {
-                case LabourUnitType.Fixed:
-                    daysNeeded = requirement.LabourPerUnit;
-                    break;
-                case LabourUnitType.perHead:
-                    daysNeeded = Math.Ceiling(allIndividuals / requirement.UnitSize) * requirement.LabourPerUnit;
-                    break;
-                default:
-                    throw new Exception(String.Format("LabourUnitType {0} is not supported for {1} in {2}", requirement.UnitType, requirement.Name, this.Name));
-            }
-            return daysNeeded;
         }
-
-        /// <summary>
-        /// The method allows the activity to adjust resources requested based on shortfalls (e.g. labour) before they are taken from the pools
-        /// </summary>
-        public override void AdjustResourcesNeededForActivity()
-        {
-            return;
-        }
-    }
-
-    /// <summary>
-    /// Ruminant feeding styles
-    /// </summary>
-    public enum OtherAnimalsFeedActivityTypes
-    {
-        /// <summary>
-        /// Feed specified amount daily in selected months
-        /// </summary>
-        SpecifiedDailyAmount,
-        /// <summary>
-        /// Feed proportion of animal weight in selected months
-        /// </summary>
-        ProportionOfWeight,
     }
 }

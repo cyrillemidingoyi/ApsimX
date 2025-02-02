@@ -1,15 +1,13 @@
 using System;
 using Models.Core;
 using Newtonsoft.Json;
-using System.IO;
-using Models.Functions;
 
 namespace Models.PMF.Phen
 {
 
     /// <summary>It is the end phase in phenology and the crop will sit, unchanging, in this phase until it is harvested or removed by other method</summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
     public class EndPhase : Model, IPhase
@@ -24,6 +22,10 @@ namespace Models.PMF.Phen
         /// <summary>The end</summary>
         [Models.Core.Description("End")]
         public string End { get; set; }
+
+        /// <summary>Is the phase emerged from the ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
 
         /// <summary>Return a fraction of phase complete.</summary>
         [JsonIgnore]
@@ -46,9 +48,10 @@ namespace Models.PMF.Phen
         }
 
         /// <summary>Resets the phase.</summary>
-        public void ResetPhase()  { }      
+        public void ResetPhase() { }
+
     }
 }
 
-      
-      
+
+

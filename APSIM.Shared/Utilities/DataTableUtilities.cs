@@ -1,19 +1,21 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Data;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+
 namespace APSIM.Shared.Utilities
 {
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Data;
-    using System.Globalization;
-    using System.IO;
-    using System.Linq;
-    using System.Text;
-    using System.Text.RegularExpressions;
+
 
     /// <summary>
     /// Some utilities for manipulating a data table.
     /// </summary>
-    public class DataTableUtilities
+    public static class DataTableUtilities
     {
         /// <summary>
         /// Add a value to the specified data table
@@ -53,7 +55,7 @@ namespace APSIM.Shared.Utilities
 
             if (values == null)
                 return;
-		
+
             // Make sure there are enough values in the table.
             while (table.Rows.Count < values.Length + startRow)
                 table.Rows.Add(table.NewRow());
@@ -80,7 +82,7 @@ namespace APSIM.Shared.Utilities
             AddColumn(table, columnName, values, 0, Count);
         }
 
-        /// <summary> 
+        /// <summary>
         /// Add a column of values to the specified data table
         /// </summary>
         static public void AddColumn(DataTable table, string columnName, string[] values)
@@ -94,25 +96,31 @@ namespace APSIM.Shared.Utilities
         /// <summary>
         /// Add a column of values to the specified data table
         /// </summary>
-        static public void AddColumn(DataTable table, string columnName, string[] values, int startRow, int count)
+        static public void AddColumn<T>(DataTable table, string columnName, IEnumerable<T> values, int startRow, int count)
         {
             if (table.Columns.IndexOf(columnName) == -1)
-                table.Columns.Add(columnName, typeof(string));
+                table.Columns.Add(columnName, typeof(T));
 
             if (values == null)
                 return;
-			
-            // Make sure there are enough values in the table.
-            while (table.Rows.Count < values.Length + startRow)
-                table.Rows.Add(table.NewRow());
 
             int row = startRow;
-            for (int Index = 0; Index != values.Length; Index++)
+            foreach (var value in values)
             {
-                if (values[Index] != "")
-                    table.Rows[row][columnName] = values[Index];
+                while (row >= table.Rows.Count)
+                    table.Rows.Add(table.NewRow());
+
+                if (IsValid(value))
+                    table.Rows[row][columnName] = value;
                 row++;
             }
+        }
+
+        static private bool IsValid(object value)
+        {
+            return value != null &&
+                   (value.GetType() == typeof(string) && !string.IsNullOrEmpty((string)value) ||
+                    value.GetType() == typeof(double) && !double.IsNaN((double)value));
         }
 
         /// <summary>
@@ -147,7 +155,7 @@ namespace APSIM.Shared.Utilities
                     // If the value is a double.NaN then don't put into table.
                     // All other values do get inserted.
                     bool insertValue = true;
-                    if (value is double && (double.IsNaN((double) value) || (double) value == MathUtilities.MissingValue))
+                    if (value is double && (double.IsNaN((double)value) || (double)value == MathUtilities.MissingValue))
                     {
                         insertValue = false;
                     }
@@ -166,9 +174,12 @@ namespace APSIM.Shared.Utilities
         /// <summary>
         /// Get a column of values from the specified data table
         /// </summary>
-        static public double[] GetColumnAsDoubles(DataTable table, string columnName)
+        /// <param name="table"></param>
+        /// <param name="columnName"></param>
+        /// <param name="culture">Culture settings used for parsing doubles.</param>
+        static public double[] GetColumnAsDoubles(DataTable table, string columnName, CultureInfo culture)
         {
-            return GetColumnAsDoubles(table, columnName, table.Rows.Count);
+            return GetColumnAsDoubles(table, columnName, table.Rows.Count, culture);
         }
 
         /// <summary>
@@ -177,8 +188,9 @@ namespace APSIM.Shared.Utilities
         /// <param name="table"></param>
         /// <param name="columnName"></param>
         /// <param name="numValues"></param>
+        /// <param name="culture">Culture settings used for parsing doubles.</param>
         /// <returns></returns>
-        static public double[] GetColumnAsDoubles(DataTable table, string columnName, int numValues)
+        static public double[] GetColumnAsDoubles(DataTable table, string columnName, int numValues, CultureInfo culture)
         {
             double[] values = new double[numValues];
             for (int Row = 0; Row != table.Rows.Count && Row != numValues; Row++)
@@ -186,7 +198,7 @@ namespace APSIM.Shared.Utilities
                 if (table.Rows[Row][columnName].ToString() == "")
                     values[Row] = double.NaN;
                 else
-                    values[Row] = Convert.ToDouble(table.Rows[Row][columnName], System.Globalization.CultureInfo.InvariantCulture);
+                    values[Row] = Convert.ToDouble(table.Rows[Row][columnName], culture);
             }
             return values;
         }
@@ -212,6 +224,21 @@ namespace APSIM.Shared.Utilities
         }
 
         /// <summary>
+        /// Get a column as long integers
+        /// </summary>
+        /// <param name="table"></param>
+        /// <param name="columnName"></param>
+        /// <returns></returns>
+        static public long[] GetColumnAsLongInts(DataTable table, string columnName)
+        {
+            long[] values = new long[table.Rows.Count];
+            for (int Row = 0; Row != table.Rows.Count; Row++)
+                values[Row] = Convert.ToInt64(table.Rows[Row][columnName], CultureInfo.InvariantCulture);
+
+            return values;
+        }
+
+        /// <summary>
         /// Get a column as integers
         /// </summary>
         /// <param name="table"></param>
@@ -222,12 +249,12 @@ namespace APSIM.Shared.Utilities
             int[] values = new int[table.Rows.Count];
             for (int Row = 0; Row != table.Rows.Count; Row++)
                 values[Row] = Convert.ToInt32(table.Rows[Row][columnName], CultureInfo.InvariantCulture);
-            
+
             return values;
         }
 
         /// <summary>
-        /// Get a column as doubles
+        /// Get a column as integers
         /// </summary>
         /// <param name="table"></param>
         /// <param name="columnName"></param>
@@ -253,20 +280,23 @@ namespace APSIM.Shared.Utilities
         /// <param name="columnName"></param>
         /// <param name="numValues"></param>
         /// <param name="startRow"></param>
+        /// <param name="culture">Culture settings used to parse string values to double.</param>
         /// <returns></returns>
-        static public double[] GetColumnAsDoubles(DataTable table, string columnName, int numValues, int startRow)
+        static public double[] GetColumnAsDoubles(DataTable table, string columnName, int numValues, int startRow, CultureInfo culture)
         {
-            double[] values = new double[numValues];
+            double[] values;
+            values = new double[numValues - startRow];
+
             int index = 0;
-            for (int Row = startRow; Row != table.Rows.Count && index != numValues; Row++)
+            for (int row = startRow; row != table.Rows.Count && index != numValues; row++)
             {
-                if (table.Rows[Row][columnName].ToString() == "")
-                    values[index] = MathUtilities.MissingValue;
+                if (table.Rows[row][columnName].ToString() == string.Empty)
+                    values[index] = double.NaN;
                 else
                 {
                     try
                     {
-                        values[index] = Convert.ToDouble(table.Rows[Row][columnName], System.Globalization.CultureInfo.InvariantCulture);
+                        values[index] = Convert.ToDouble(table.Rows[row][columnName], culture);
                     }
                     catch (Exception)
                     {
@@ -275,7 +305,10 @@ namespace APSIM.Shared.Utilities
                 }
                 index++;
             }
-            return values;
+            if (MathUtilities.ValuesInArray(values))
+                return values;
+            else
+                return null;
         }
 
         /// <summary>Get columns as doubles within specific data range</summary>
@@ -306,26 +339,27 @@ namespace APSIM.Shared.Utilities
         /// <summary>
         /// Get a column of values from the specified data table
         /// </summary>
-        static public string[] GetColumnAsStrings(DataTable table, string columnName)
+        static public string[] GetColumnAsStrings(DataTable table, string columnName, CultureInfo culture)
         {
-            return GetColumnAsStrings(table, columnName, table.Rows.Count);
+            return GetColumnAsStrings(table, columnName, table.Rows.Count, culture);
         }
-        
+
         /// <summary>
         /// Get a column as strings
         /// </summary>
         /// <param name="table"></param>
         /// <param name="columnName"></param>
         /// <param name="numValues"></param>
+        /// <param name="culture">The culture settings used to convert to string values.</param>
         /// <returns></returns>
-        static public string[] GetColumnAsStrings(DataTable table, string columnName, int numValues)
+        static public string[] GetColumnAsStrings(DataTable table, string columnName, int numValues, CultureInfo culture)
         {
             string[] values = new string[numValues];
             for (int row = 0; row != table.Rows.Count && row != numValues; row++)
-                values[row] = Convert.ToString(table.Rows[row][columnName], CultureInfo.InvariantCulture);
+                values[row] = Convert.ToString(table.Rows[row][columnName], culture);
             return values;
         }
-        
+
         /// <summary>
         /// Get a column as strings.
         /// </summary>
@@ -333,14 +367,15 @@ namespace APSIM.Shared.Utilities
         /// <param name="columnName"></param>
         /// <param name="numValues"></param>
         /// <param name="startRow"></param>
+        /// <param name="culture">Culture settings used to convert to string values.</param>
         /// <returns></returns>
-        static public string[] GetColumnAsStrings(DataTable table, string columnName, int numValues, int startRow)
+        static public string[] GetColumnAsStrings(DataTable table, string columnName, int numValues, int startRow, CultureInfo culture)
         {
             string[] values = new string[numValues];
             int index = 0;
             for (int Row = startRow; Row != table.Rows.Count && index != numValues; Row++)
             {
-                values[index] = Convert.ToString(table.Rows[Row][columnName], CultureInfo.InvariantCulture);
+                values[index] = Convert.ToString(table.Rows[Row][columnName], culture);
                 index++;
             }
             return values;
@@ -357,7 +392,31 @@ namespace APSIM.Shared.Utilities
             string[] values = new string[view.Count];
             for (int row = 0; row != view.Count; row++)
                 values[row] = view[row][columnName].ToString();
-                
+
+            return values;
+        }
+
+        /// <summary>
+        /// Get a column as dates.
+        /// </summary>
+        /// <param name="table">The data table that contains the data required</param>
+        /// <param name="columnName">The name of the Date Column</param>
+        /// <param name="numValues"></param>
+        /// <param name="startRow"></param>
+        /// <returns>An array of dates</returns>
+        static public DateTime[] GetColumnAsDates(DataTable table, string columnName, int numValues, int startRow)
+        {
+            DateTime[] values = new DateTime[numValues];
+            int index = 0;
+            for (int row = startRow; row < table.Rows.Count && index < numValues; row++)
+            {
+                string date = DateUtilities.ValidateDateString(table.Rows[row][columnName].ToString());
+                if (date == null)
+                    values[index] = DateTime.MinValue;
+                else
+                    values[index] = DateUtilities.GetDate(date);
+                index++;
+            }
             return values;
         }
 
@@ -372,10 +431,11 @@ namespace APSIM.Shared.Utilities
             DateTime[] values = new DateTime[table.Rows.Count];
             for (int row = 0; row != table.Rows.Count; row++)
             {
-                if (Convert.IsDBNull(table.Rows[row][columnName]))
+                string date = DateUtilities.ValidateDateString(table.Rows[row][columnName].ToString());
+                if (date == null)
                     values[row] = DateTime.MinValue;
                 else
-                    values[row] = Convert.ToDateTime(table.Rows[row][columnName], CultureInfo.InvariantCulture);
+                    values[row] = DateUtilities.GetDate(date);
             }
             return values;
         }
@@ -431,13 +491,13 @@ namespace APSIM.Shared.Utilities
         {
             //where row.Field<DateTime>(colName) >= firstDate
             var result = (from row in table.AsEnumerable()
-                         where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
-                                DataTableUtilities.GetDateFromRow(row) <= lastDate)
-                         orderby DataTableUtilities.GetDateFromRow(row)
-                         select new
-                         {
-                             Month = DataTableUtilities.GetDateFromRow(row).Month
-                         }).Distinct();
+                          where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                 DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                          orderby DataTableUtilities.GetDateFromRow(row)
+                          select new
+                          {
+                              Month = DataTableUtilities.GetDateFromRow(row).Month
+                          }).Distinct();
 
             List<string> rValues = new List<string>();
             foreach (var row in result)
@@ -450,7 +510,7 @@ namespace APSIM.Shared.Utilities
         /// <summary>
         /// Get a list of column names
         /// </summary>
-        static public string[] GetColumnNames(DataTable table)
+        static public string[] GetColumnNames(this DataTable table)
         {
             if (table != null)
             {
@@ -625,10 +685,53 @@ namespace APSIM.Shared.Utilities
             return monthlyData;
         }
 
+/// <summary>
+/// Read a file into a datatable.
+/// </summary>
+/// <param name="filePath"></param>
+/// <param name="convertFunc">Optional function to convert data types</param>
+/// <param name="delimiter">Delimiter to use</param>
+/// <param name="linesToSkip"></param>
+public static DataTable ReadDataTable(string filePath, char delimiter = ' ', int linesToSkip = 0,
+                                      Func<int, string, object> convertFunc = null)
+{
+    DataTable tbl = new DataTable();
+
+    string[] lines = File.ReadAllLines(filePath)
+                         .Skip(linesToSkip)
+                         .ToArray();
+    var headings = lines[0].Split(delimiter);
+    for(int col = 0; col < headings.Length; col++)
+        tbl.Columns.Add(new DataColumn(headings[col]));
+
+    foreach(string line in lines.Skip(1))
+    {
+        var cols = line.Split(delimiter);
+
+        DataRow dr = tbl.NewRow();
+        for(int cIndex=0; cIndex < headings.Length; cIndex++)
+        {
+            string word = cols[cIndex];
+            object value;
+            if (convertFunc == null)
+                value = word;
+            else
+                value = convertFunc(cIndex, word);
+
+            dr[cIndex] = value;
+        }
+
+        tbl.Rows.Add(dr);
+    }
+
+    return tbl;
+}
+
+
         /// <summary>
         /// Write the specified DataTable to a CSV string, excluding the specified column names.
         /// </summary>
-        static public void DataTableToText(DataTable data, int startColumnIndex, string delimiter, bool showHeadings, TextWriter writer, bool excelFriendly = false, string decimalFormatString="F3")
+        static public void DataTableToText(DataTable data, int startColumnIndex, string delimiter, bool showHeadings, TextWriter writer, bool excelFriendly = false, string decimalFormatString = "F3")
         {
             // Convert the data table to a table of strings. This will make it easier for
             // calculating widths.
@@ -641,6 +744,16 @@ namespace APSIM.Shared.Utilities
                 foreach (DataColumn column in data.Columns)
                     newRow[column.Ordinal] = ConvertObjectToString(row[column], decimalFormatString);
                 stringTable.Rows.Add(newRow);
+            }
+
+            //Sort Rows by SimulationName in alphabetical order
+            if (stringTable.Columns.Contains("SimulationName"))
+            {
+                DataView dv = stringTable.DefaultView;
+                dv.Sort = "SimulationName ASC";
+                if (stringTable.Columns.Contains("Clock.Today"))
+                    dv.Sort += ", Clock.Today ASC";
+                stringTable = dv.ToTable();
             }
 
             // Need to work out column widths
@@ -658,12 +771,12 @@ namespace APSIM.Shared.Utilities
             {
                 for (int i = startColumnIndex; i < stringTable.Columns.Count; i++)
                 {
-                    if (i > startColumnIndex) 
+                    if (i > startColumnIndex)
                         writer.Write(delimiter);
                     if (excelFriendly)
                         writer.Write(stringTable.Columns[i].ColumnName);
                     else
-                        writer.Write("{0," + columnWidths[i] + "}", stringTable.Columns[i].ColumnName);
+                        writer.Write(stringTable.Columns[i].ColumnName);
                 }
                 writer.Write(Environment.NewLine);
             }
@@ -678,7 +791,7 @@ namespace APSIM.Shared.Utilities
                     if (excelFriendly)
                         writer.Write(row[i]);
                     else
-                        writer.Write("{0," + columnWidths[i] + "}", row[i]);
+                        writer.Write(row[i]);
                 }
                 writer.Write(Environment.NewLine);
             }
@@ -741,6 +854,21 @@ namespace APSIM.Shared.Utilities
                 }
                 to.Rows.Add(newRow);
             }
+        }
+
+        /// <summary>
+        /// Merge a collection of data tables.
+        /// </summary>
+        /// <param name="tables">The tables to be merged.</param>
+        public static DataTable Merge(IEnumerable<DataTable> tables)
+        {
+            if (tables == null)
+                return null;
+
+            DataTable result = new DataTable(tables.FirstOrDefault()?.TableName);
+            foreach (DataTable table in tables)
+                result.Merge(table);
+            return result;
         }
 
         /// <summary>
@@ -822,7 +950,7 @@ namespace APSIM.Shared.Utilities
             int[] columnWidths = new int[table.Columns.Count];
             for (int i = 0; i < table.Columns.Count; i++)
                 columnWidths[i] = table.Columns[i].ColumnName.Length;
-            
+
             foreach (DataRow row in table.Rows)
                 for (int i = 0; i < table.Columns.Count; i++)
                     if (row[i] != null && row[i].ToString().Length > columnWidths[i])
@@ -862,7 +990,7 @@ namespace APSIM.Shared.Utilities
                 for (int i = 0; i < table.Columns.Count; i++)
                 {
                     int padding = columnWidths[i] - row[i]?.ToString()?.Length ?? 0;
-                    result.Append(row[i]);
+                    result.Append(row[i].ToString().Replace("\n", " ").Replace("\r", "").Trim());
                     result.Append(new string(' ', padding));
                     result.Append("|");
                 }
@@ -914,18 +1042,19 @@ namespace APSIM.Shared.Utilities
         }
 
         /// <summary>
-        /// Convert a csv string into a data table. Note that the datatable of each 
+        /// Convert a csv string into a data table. Note that the datatable of each
         /// column will be string.
         /// </summary>
+        /// <param name="tableName">Name of the table to create.</param>
         /// <param name="csv">The csv string.</param>
         /// <returns>The created datatable.</returns>
-        public static DataTable FromCSV(string csv)
+        public static DataTable FromCSV(string tableName, string csv)
         {
             var sr = new StringReader(csv);
             string[] headers = sr.ReadLine().Split(',');
-            DataTable dt = new DataTable();
+            DataTable dt = new DataTable(tableName);
             foreach (string header in headers)
-                dt.Columns.Add(header);
+                dt.Columns.Add(header.Trim());
 
             var line = sr.ReadLine();
             while (!string.IsNullOrEmpty(line))
@@ -937,11 +1066,65 @@ namespace APSIM.Shared.Utilities
                 dt.Rows.Add(dr);
                 line = sr.ReadLine();
             }
+
+            // Go through all columns and see if the column datatype can be made more
+            // specific than string e.g. convert string to double
+            for (int colIndex = 0; colIndex < dt.Columns.Count; colIndex++)
+            {
+                Type typeToConvertTo = null;
+                foreach (DataRow row in dt.Rows)
+                {
+                    if (Int32.TryParse((string)row[colIndex], out int intValue))
+                    {
+                        if (typeToConvertTo == null)
+                            typeToConvertTo = typeof(int);
+                        else if (typeToConvertTo != typeof(int))
+                        {
+                            typeToConvertTo = null;
+                            break;
+                        }
+                    }
+                    else if (Double.TryParse((string)row[colIndex], out double doubleValue))
+                    {
+                        if (typeToConvertTo == null)
+                            typeToConvertTo = typeof(double);
+                        else if (typeToConvertTo != typeof(double))
+                        {
+                            typeToConvertTo = null;
+                            break;
+                        }
+                    }
+                    else if (DateTime.TryParse((string)row[colIndex], out DateTime dateValue))
+                    {
+                        if (typeToConvertTo == null)
+                            typeToConvertTo = typeof(DateTime);
+                        else if (typeToConvertTo != typeof(DateTime))
+                        {
+                            typeToConvertTo = null;
+                            break;
+                        }
+                    }
+                    else
+                        typeToConvertTo = typeof(string);
+                }
+                if (typeToConvertTo != null && typeToConvertTo != typeof(string))
+                    ConvertDataTableOfColumn(dt, dt.Columns[colIndex].ColumnName, typeToConvertTo);
+            }
+
             return dt;
         }
 
+        /// <summary>Convert a DataTable to a comma separated text string.</summary>
+        /// <param name="table">The table to convert.</param>
+        public static string ToCSV(DataTable table)
+        {
+            System.IO.StringWriter writer = new System.IO.StringWriter();
+            DataTableUtilities.DataTableToText(table, 0, ",", true, writer);
+            return writer.ToString();
+        }
+
         /// <summary>
-        /// Convert a csv string into a data table. Note that the datatable of each 
+        /// Convert a csv string into a data table. Note that the datatable of each
         /// column will be string.
         /// </summary>
         /// <param name="table">The data table.</param>
@@ -974,6 +1157,321 @@ namespace APSIM.Shared.Utilities
 
             // Rename new column.
             newColumn.ColumnName = columnName;
+        }
+
+        /// <summary>
+        /// Utility method which sums a specific field in a collection of data rows.
+        /// </summary>
+        /// <param name="rows">Rows to be summed.</param>
+        /// <param name="fieldName">Name of the field to be summed.</param>
+        /// <returns></returns>
+        private static double SumOfRows(DataRow[] rows, string fieldName)
+        {
+            double total = 0;
+            foreach (DataRow row in rows)
+            {
+                double field;
+                if (double.TryParse(row.Field<object>(fieldName)?.ToString(), out field))
+                    total += field;
+                else
+                {
+                    DateTime date = DataTableUtilities.GetDateFromRow(row);
+                    throw new Exception("Invalid data in column " + fieldName + " on date " + date.ToShortDateString() + " (day of year = " + date.DayOfYear + ")");
+                }
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Utility method which averages a specific field in a collection of data rows.
+        /// </summary>
+        /// <param name="rows">Rows to be summed.</param>
+        /// <param name="fieldName">Name of the field to be summed.</param>
+        /// <returns></returns>
+        private static double AverageOfRows(DataRow[] rows, string fieldName)
+        {
+            double total = 0;
+            foreach (DataRow row in rows)
+            {
+                double field;
+                if (double.TryParse(row.Field<object>(fieldName)?.ToString(), out field))
+                    total += field;
+                else
+                {
+                    DateTime date = DataTableUtilities.GetDateFromRow(row);
+                    throw new Exception("Invalid data in column " + fieldName + " on date " + date.ToShortDateString() + " (day of year = " + date.DayOfYear + ")");
+                }
+            }
+            return MathUtilities.Divide(total, rows.Length, 0);
+        }
+
+        /// <summary>
+        /// Returns monthly totals for the given variable.
+        /// </summary>
+        /// <param name="table">The data table containing the data.</param>
+        /// <param name="fieldName">The field name to look at.</param>
+        /// <param name="firstDate">Only data after this date will be used.</param>
+        /// <param name="lastDate">Only data before this date will be used.</param>
+        /// <returns>Array of tuples. Each tuple contains a date (month) and the total of the field's values for that month.</returns>
+        public static Tuple<DateTime, double>[] MonthlyTotals(DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count < 1)
+                return null;
+            var result = from row in table.AsEnumerable()
+                         where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                         group row by new
+                         {
+                             Year = DataTableUtilities.GetDateFromRow(row).Year,
+                             Month = DataTableUtilities.GetDateFromRow(row).Month,
+                         } into grp
+                         select new
+                         {
+                             Year = grp.Key.Year,
+                             Month = grp.Key.Month,
+                             Total = SumOfRows(grp.AsEnumerable().ToArray(), fieldName)
+                         };
+            return result.Select(r => new Tuple<DateTime, double>(new DateTime(r.Year, r.Month, 1), r.Total)).ToArray();
+        }
+
+        /// <summary>
+        /// Return longterm average monthly totals for the given variable.
+        /// </summary>
+        /// <remarks>
+        ///
+        /// Assumes a a date can be derived from the data table using the
+        /// DataTable.GetDateFromRow function.
+        /// </remarks>
+        /// <param name="table">The data table containing the data</param>
+        /// <param name="fieldName">The field name to look at</param>
+        /// <param name="firstDate">Only data after this date will be used</param>
+        /// <param name="lastDate">Only data before this date will be used</param>
+        /// <returns>An array of 12 numbers or null if no data in table.</returns>
+        public static double[] AverageMonthlyTotals(System.Data.DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count > 0)
+            {
+                // This first query gives monthly totals for each year.
+                var result = from row in table.AsEnumerable()
+                             where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                    DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                             group row by new
+                             {
+                                 Year = DataTableUtilities.GetDateFromRow(row).Year,
+                                 Month = DataTableUtilities.GetDateFromRow(row).Month,
+                             } into grp
+                             select new
+                             {
+                                 Year = grp.Key.Year,
+                                 Month = grp.Key.Month,
+                                 Total = SumOfRows(grp.AsEnumerable().ToArray(), fieldName)
+                             };
+
+                // This second query gives average monthly totals using the first query.
+                var result2 = from row in result
+                              group row by new
+                              {
+                                  Month = row.Month,
+                              } into grp
+                              select new
+                              {
+                                  Month = grp.Key.Month,
+                                  Avg = grp.Average(row => row.Total)
+                              };
+
+
+                List<double> totals = new List<double>();
+                foreach (var row in result2)
+                    totals.Add(row.Avg);
+
+                return totals.ToArray();
+            }
+
+            return null;
+        }
+
+
+        /// <summary>
+        /// Return longterm average monthly averages for the given variable.
+        /// </summary>
+        /// <remarks>
+        ///
+        /// Assumes a a date can be derived from the data table using the
+        /// DataTable.GetDateFromRow function.
+        /// </remarks>
+        /// <param name="table">The data table containing the data</param>
+        /// <param name="fieldName">The field name to look at</param>
+        /// <param name="firstDate">Only data after this date will be used</param>
+        /// <param name="lastDate">Only data before this date will be used</param>
+        /// <returns>An array of 12 numbers or null if no data in table.</returns>
+        public static double[] AverageMonthlyAverages(System.Data.DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count > 0)
+            {
+                // This first query gives monthly totals for each year.
+                var result = from row in table.AsEnumerable()
+                             where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                    DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                             group row by new
+                             {
+                                 Year = DataTableUtilities.GetDateFromRow(row).Year,
+                                 Month = DataTableUtilities.GetDateFromRow(row).Month,
+                             } into grp
+                             select new
+                             {
+                                 Year = grp.Key.Year,
+                                 Month = grp.Key.Month,
+                                 Avg = AverageOfRows(grp.AsEnumerable().ToArray(), fieldName)
+                             };
+
+                // This second query gives average monthly totals using the first query.
+                var result2 = from row in result
+                              group row by new
+                              {
+                                  Month = row.Month,
+                              } into grp
+                              select new
+                              {
+                                  Month = grp.Key.Month,
+                                  Avg = grp.Average(row => row.Avg)
+                              };
+
+
+                List<double> totals = new List<double>();
+                foreach (var row in result2)
+                    totals.Add(row.Avg);
+
+                return totals.ToArray();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Return yearly totals for the given variable.
+        /// </summary>
+        /// <remarks>
+        /// Assumes a a date can be derived from the data table using the
+        /// DataTable.GetDateFromRow function.
+        /// </remarks>
+        /// <param name="table">The data table containing the data</param>
+        /// <param name="fieldName">The field name to look at</param>
+        /// <param name="firstDate">Only data after this date will be used</param>
+        /// <param name="lastDate">Only data before this date will be used</param>
+        /// <returns>An array of yearly totals or null if no data in table.</returns>
+        public static double[] YearlyTotals(System.Data.DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count > 0)
+            {
+                var result = from row in table.AsEnumerable()
+                             where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                    DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                             group row by new
+                             {
+                                 Year = DataTableUtilities.GetDateFromRow(row).Year,
+                             } into grp
+                             select new
+                             {
+                                 Year = grp.Key.Year,
+                                 Total = SumOfRows(grp.AsEnumerable().ToArray(), fieldName)
+                             };
+
+                List<double> totals = new List<double>();
+                foreach (var row in result)
+                    totals.Add(row.Total);
+
+                return totals.ToArray();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Return yearly averages for the given variable.
+        /// </summary>
+        /// <remarks>
+        /// Assumes a a date can be derived from the data table using the
+        /// DataTable.GetDateFromRow function.
+        /// </remarks>
+        /// <param name="table">The data table containing the data</param>
+        /// <param name="fieldName">The field name to look at</param>
+        /// <param name="firstDate">Only data after this date will be used</param>
+        /// <param name="lastDate">Only data before this date will be used</param>
+        /// <returns>An array of yearly totals or null if no data in table.</returns>
+        public static double[] YearlyAverages(System.Data.DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count > 0)
+            {
+                var result = from row in table.AsEnumerable()
+                             where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                    DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                             group row by new
+                             {
+                                 Year = DataTableUtilities.GetDateFromRow(row).Year,
+                             } into grp
+                             select new
+                             {
+                                 Year = grp.Key.Year,
+                                 Total = AverageOfRows(grp.AsEnumerable().ToArray(), fieldName)
+                             };
+
+                List<double> totals = new List<double>();
+                foreach (var row in result)
+                    totals.Add(row.Total);
+
+                return totals.ToArray();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Return average daily totals for each month for the the given variable.
+        /// </summary>
+        /// <remarks>
+        /// Assumes a a date can be derived from the data table using the
+        /// DataTable.GetDateFromRow function.
+        /// </remarks>
+        /// <param name="table">The data table containing the data</param>
+        /// <param name="fieldName">The field name to look at</param>
+        /// <param name="firstDate">Only data after this date will be used</param>
+        /// <param name="lastDate">Only data before this date will be used</param>
+        /// <returns>An array of monthly averages or null if no data in table.</returns>
+        public static double[] AverageDailyTotalsForEachMonth(System.Data.DataTable table, string fieldName, DateTime firstDate, DateTime lastDate)
+        {
+            if (table.Rows.Count > 0)
+            {
+                var result = from row in table.AsEnumerable()
+                             where (DataTableUtilities.GetDateFromRow(row) >= firstDate &&
+                                    DataTableUtilities.GetDateFromRow(row) <= lastDate)
+                             group row by new
+                             {
+                                 Month = DataTableUtilities.GetDateFromRow(row).Month,
+                                 Year = DataTableUtilities.GetDateFromRow(row).Year,
+                             } into grp
+                             select new
+                             {
+                                 Year = grp.Key.Year,
+                                 Total = MathUtilities.Divide(SumOfRows(grp.AsEnumerable().ToArray(), fieldName), grp.AsEnumerable().Count(), 0)
+                             };
+                List<double> totals = new List<double>();
+                foreach (var row in result)
+                    totals.Add(row.Total);
+
+                return totals.ToArray();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if table has a double as its very first value.
+        /// </summary>
+        /// <param name="table"></param>
+        /// <returns>a <see cref="bool">bool</see></returns>
+        public static bool IsTablesFirstValueDouble(DataTable table)
+        {
+            return Double.TryParse(table.Rows[0][0] as string, out double firstValue);
         }
     }
 }

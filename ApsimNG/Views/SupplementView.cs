@@ -1,12 +1,14 @@
-﻿namespace UserInterface.Views
-{
-    using System;
-    using System.Collections.Generic;
-    using Gtk;
-    using Interfaces;
-    using Models.GrazPlan;   // For access to the TSuppAttribute enumeration
+﻿using System;
+using System.Collections.Generic;
+using UserInterface.Extensions;
+using Gtk;
+using Models.GrazPlan;   // For access to the TSuppAttribute enumeration
+using UserInterface.Interfaces;
 
-    public class SupplementView : ViewBase, ISupplementView
+namespace UserInterface.Views
+{
+
+    public class SupplementView : ViewBase
     {
         /// <summary>
         /// Invoked when a supplement has been selected by user.
@@ -37,7 +39,7 @@
 
         public event EventHandler<TStringArgs> SuppNameChanged;
 
-        private Table table1 = null;
+        private Grid table1 = null;
         private Entry tbSulph = null;
         private Entry tbPhos = null;
         private Entry tbADIP2CP = null;
@@ -65,7 +67,7 @@
         public SupplementView(ViewBase owner) : base(owner)
         {
             Builder builder = BuilderFromResource("ApsimNG.Resources.Glade.SupplementView.glade");
-            table1 = (Table)builder.GetObject("table1");
+            table1 = (Grid)builder.GetObject("table1");
             tbSulph = (Entry)builder.GetObject("tbSulph");
             tbPhos = (Entry)builder.GetObject("tbPhos");
             tbADIP2CP = (Entry)builder.GetObject("tbADIP2CP");
@@ -206,13 +208,13 @@
                             value = 0.0;
                         else if (!Double.TryParse(tb.Text, out value) || value < 0.0 || value > maxVal)
                         {
-                            /// e.Cancel = true;
+                            // e.Cancel = true;
                             cancel = true;
                             MessageDialog md = new MessageDialog(MainWidget.Toplevel as Window, DialogFlags.Modal, MessageType.Warning, ButtonsType.Ok,
                                                String.Format("Value should be a number in the range 0 to {0:F2}", maxVal));
                             md.Title = "Invalid entry";
                             md.Run();
-                            md.Destroy();
+                            md.Dispose();
                         }
                         if (!cancel)
                         {
@@ -497,7 +499,7 @@
                                        "Value should be a non-negative number");
                     md.Title = "Invalid entry";
                     md.Run();
-                    md.Destroy();
+                    md.Dispose();
                 }
                 if (!cancel)
                 {
@@ -529,7 +531,7 @@
                                        "You must provide a name for the supplement");
                     md.Title = "Invalid entry";
                     md.Run();
-                    md.Destroy();
+                    md.Dispose();
                 }
                 if (!cancel)
                 {

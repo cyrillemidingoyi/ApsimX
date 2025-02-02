@@ -1,13 +1,16 @@
 ﻿using System;
-using System.Text;
-using System.Linq;
-using System.IO;
-using System.Drawing;
 using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using APSIM.Shared.Documentation.Extensions;
+using APSIM.Shared.Utilities;
+using Models.Core;
 
 namespace Utility
 {
-    /// <summary>Handle the reading and writing of the configuration settings file</summary>
+
+    /// <summary>Stores user settings and other information which is persistent between restarts of the GUI.</summary>
     public class Configuration
     {
         /// <summary>The instance</summary>
@@ -16,6 +19,8 @@ namespace Utility
         /// <summary>The configuration file</summary>
         private string configurationFile = null;
 
+        public bool ThemeRestartRequired = false;
+
         /// <summary>The location for the form</summary>
         public Point MainFormLocation { get; set; }
 
@@ -23,38 +28,72 @@ namespace Utility
         public Size MainFormSize { get; set; }
 
         /// <summary>The state (max, min, norm) of the form</summary>
-        public Boolean MainFormMaximized { get; set; }
+        public bool MainFormMaximized { get; set; }
 
         /// <summary>List of the most recently opened files</summary>
         public List<ApsimFileMetadata> MruList { get; set; }
 
         /// <summary>The maximum number of files allowed in the mru list</summary>
+        [Input("Number of files in history")]
         public int FilesInHistory { get; set; }
 
         /// <summary>Position of split screen divider.</summary>
-        /// <remarks>Not sure what units this uses...might be pixels.</remarks>
+        /// <remarks>Percentage 0-100</remarks>
         public int SplitScreenPosition { get; set; }
+
+        /// <summary>Position of split screen divider.</summary>
+        /// <remarks>Percentage 0-100</remarks>
+        public int TreeSplitScreenPosition { get; set; }
 
         /// <summary>The previous folder where a file was opened or saved</summary>
         public string PreviousFolder { get; set; }
 
         /// <summary>The previous height of the status panel</summary>
-        public int StatusPanelHeight { get; set; }
+        /// <remarks>Percentage 0-100</remarks>
+        public double StatusPanelHeight { get; set; }
 
         /// <summary>
         /// The position of the splitter between the variables
         /// and frequency text editors in the report UI.
         /// </summary>
-        public int ReportSplitterPosition { get; set; }
+        public double ReportSplitterPosition { get; set; }
+
+        /// <summary>
+        /// The position of the splitter between the variables/event text editors
+        /// and the common report/event ListViews.
+        /// </summary>
+        public double ReportSplitterVerticalPosition { get; set; }
 
         /// <summary>Keeps track of whether the dark theme is enabled.</summary>
+        [Input("Dark theme enabled", OnChanged = nameof(OnDarkThemeToggled))]
         public bool DarkTheme { get; set; }
 
-        /// <summary>Iff true, the GUI will not play a sound when simulations finish running.</summary>
-        public bool Muted { get; set; }
+        /// <summary>Should the file be automatically saved to disk before running simulations?</summary>
+        [Input("Autosave on run")]
+        [Tooltip("Should the file be automatically saved to disk before running simulations?")]
+        public bool AutoSave { get; set; } = true;
 
-        /// <summary>Use the new property presenter?</summary>
-        public bool UseNewPropertyPresenter { get; set; }
+        /// <summary>If true, the GUI will not play a sound when simulations finish running.</summary>
+        [Input("Mute all sound effects")]
+        public bool Muted { get; set; } = true;
+
+        /// <summary>
+        /// In theory, if there are any commands in the command history,
+        /// then the file has been modified. In practice, there may be
+        /// some faulty presenters which make changes to the model without
+        /// using the command history.
+        /// </summary>
+        [Input("Use faster file closing algorithm")]
+        [Tooltip("This will mostly eliminate the pause when closing a file, but it may cause apsim to fail to prompt to save the file in some cases.")]
+        public bool UseFastFileClose { get; set; }
+
+        [Input("Enable graph debugging output")]
+        [Tooltip("Outputs messages in the status bar if data is missing, is outside axis bounds or is NaN. Useful for debugging Observed/Predicted graphs.")]
+        public bool EnableGraphDebuggingMessages { get; set; } = false;
+
+        [Input("Graph Size")]
+        [Tooltip("The picture resolution of graph when copied to the clipboard. Width by Height.")]
+        public string GraphSize { get; set; } = "800x600";
 
         /// <summary>Return the name of the summary file JPG.</summary>
         public string SummaryPngFileName
@@ -67,8 +106,8 @@ namespace Utility
                 {
                     try
                     {
-                        Bitmap b = ApsimNG.Properties.Resources.ResourceManager.GetObject("ApsimSummary") as Bitmap;
-                        b.Save(summaryJpg);
+                        Gdk.Pixbuf b = Gdk.Pixbuf.LoadFromResource("Apsim1.png");
+                        b.Save(summaryJpg, "jpeg");
                     }
                     catch
                     {
@@ -97,16 +136,22 @@ namespace Utility
         public string Email { get; set; }
 
         /// <summary>The maximum number of rows to show on a report grid</summary>
+        [Input("Default max number of rows to show in datastore")]
         public int MaximumRowsOnReportGrid { get; set; }
 
         /// <summary>
         /// Store the style name used in the editor
         /// </summary>
+        /// <remarks>
+        /// This should probably be user controllable, but we would need a way of
+        /// providing a list of valid values for the drop-down box.
+        /// </remarks>
         public string EditorStyleName { get; set; } = "Visual Studio";
 
         /// <summary>
         /// Store the zoom level for editors
         /// </summary>
+        [Input("Default zoom level for text editors")]
         public double EditorZoom { get; set; } = 1.0;
 
         /// <summary>
@@ -117,22 +162,27 @@ namespace Utility
         /// <summary>
         /// Simulation complete wav file.
         /// </summary>
+        [FileInput(".wav file to play when simulation finishes", ".wav")]
+        [Tooltip("Leave empty for default sound effect")]
         public string SimulationCompleteWavFileName { get; set; }
 
         /// <summary>
         /// Simulation complete with error wav file.
         /// </summary>
+        [FileInput(".wav file to play when simulation finishes with error")]
+        [Tooltip("Leave empty for default sound effect")]
         public string SimulationCompleteWithErrorWavFileName { get; set; }
 
         /// <summary>
         /// Stores the user's preferred font.
         /// </summary>
-        /// <value></value>
+        [FontInput("Font")]
         public string FontName { get; set; } = "Segoe UI 11";
 
         /// <summary>
         /// Stores the user's preferred font for the manager script text editor.
         /// </summary>
+        [FontInput("Font used in manager script editor")]
         public string EditorFontName { get; set; } = "monospace 10";
 
         /// <summary>
@@ -145,8 +195,30 @@ namespace Utility
             return MruList.Find(f => f.FileName == fileName);
         }
 
+        public (int, int) GetGraphSize()
+        {
+            try 
+            {
+                string input = GraphSize.Trim();
+                string[] parts = input.Split("x", StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 1)
+                    parts = input.Split(",", StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 1)
+                    parts = input.Split("/", StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 1)
+                    parts = input.Split(" ", StringSplitOptions.RemoveEmptyEntries);
+                int width = int.Parse(parts[0]);
+                int height = int.Parse(parts[1]);
+                return (width, height);
+            }
+            catch
+            {
+                return (800, 600);
+            }
+        }
+
         /// <summary>Add a filename to the list.</summary>
-        /// <param name="filename">File path</param>
+        /// <param name="file">File metadata.</param>
         public void AddMruFile(ApsimFileMetadata file)
         {
             if (file.FileName.Length > 0) // Do we really need this check?
@@ -246,7 +318,14 @@ namespace Utility
         /// <summary>Finalizes an instance of the <see cref="Configuration"/> class.</summary>
         ~Configuration()
         {
-            Save();
+            try
+            {
+                Save();
+            }
+            catch
+            {
+                // An uncaught exception could crash APSIM from the GC thread.
+            }
         }
 
         /// <summary>Gets the configuration settings.</summary>
@@ -313,9 +392,21 @@ namespace Utility
             if (!Directory.Exists(configPath))
                 Directory.CreateDirectory(configPath);
             StreamWriter filewriter = new StreamWriter(configurationFile);
-            System.Xml.Serialization.XmlSerializer xmlwriter = new System.Xml.Serialization.XmlSerializer(typeof(Configuration));
+            System.Xml.Serialization.XmlSerializer xmlwriter = new System.Xml.Serialization.XmlSerializer(typeof(Configuration), typeof(Configuration).GetNestedTypes());
             xmlwriter.Serialize(filewriter, Settings);
             filewriter.Close();
+        }
+
+        /// <summary>
+        /// This will be called whenever the 'dark mode' option is toggled.
+        /// It will change the default editor style to something.
+        /// </summary>
+        private void OnDarkThemeToggled()
+        {
+
+            EditorStyleName = DarkTheme ? "Adwaita-dark" : "Adwaita";
+            ThemeRestartRequired = !ThemeRestartRequired;
+
         }
     }
 }

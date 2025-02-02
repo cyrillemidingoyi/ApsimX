@@ -1,21 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Reflection;
 using Models.Core;
 using Models.PMF.Phen;
 using System.Linq;
+using Models.PMF;
 
 namespace Models.Functions
 {
-    /// <summary>
-    /// A function that accumulates values from child functions
+    /// <summary>Accumulates a child function between a start and end stage.
     /// </summary>
     [Serializable]
     [Description("Adds the value of all children functions to the previous day's accumulation between start and end phases")]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
-    public class AccumulateFunction : Model, IFunction, ICustomDocumentation
+    public class AccumulateFunction : Model, IFunction
     {
         ///Links
         /// -----------------------------------------------------------------------------------------------------------
@@ -40,14 +38,17 @@ namespace Models.Functions
         
         /// <summary>The start stage name</summary>
         [Description("Stage name to start accumulation")]
+        [Display(Type = DisplayType.CropStageName)]
         public string StartStageName { get; set; }
 
         /// <summary>The end stage name</summary>
         [Description("Stage name to stop accumulation")]
+        [Display(Type = DisplayType.CropStageName)]
         public string EndStageName { get; set; }
 
         /// <summary>The reset stage name</summary>
         [Description("(optional) Stage name to reset accumulation")]
+        [Display(Type = DisplayType.CropStageName)]
         public string ResetStageName { get; set; }
 
         /// <summary>The fraction removed on Cut event</summary>
@@ -127,8 +128,8 @@ namespace Models.Functions
         /// <summary>Called when harvest.</summary>
         /// <param name="sender">The sender.</param>
         /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
-        [EventSubscribe("Harvesting")]
-        private void OnHarvest(object sender, EventArgs e)
+        [EventSubscribe("PostHarvesting")]
+        private void OnPostHarvesting(object sender, HarvestingParameters e)
         {
             AccumulatedValue -= FractionRemovedOnHarvest * AccumulatedValue;
         }
@@ -157,25 +158,6 @@ namespace Models.Functions
         private void OnPlantEnding(object sender, EventArgs e)
         {
             AccumulatedValue = 0;
-        }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        /// <param name="tags">The list of tags to add to.</param>
-        /// <param name="headingLevel">The level (e.g. H2) of the headings.</param>
-        /// <param name="indent">The level of indentation 1, 2, 3 etc.</param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name, headingLevel));
-                tags.Add(new AutoDocumentation.Paragraph("**" + this.Name + "** is a daily accumulation of the values of functions listed below between the " + StartStageName + " and "
-                                                            + EndStageName + " stages.  Function values added to the accumulate total each day are:", indent));
-
-                // write children.
-                foreach (IModel child in this.FindAllChildren<IModel>())
-                    AutoDocumentation.DocumentModel(child, tags, headingLevel + 1, indent + 1);
-            }
         }
     }
 }

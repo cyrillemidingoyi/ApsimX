@@ -1,103 +1,96 @@
-﻿namespace Models.GrazPlan
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Interfaces;
+using Models.Soils;
+using Models.Surface;
+using StdUnits;
+
+namespace Models.GrazPlan
 {
-    using APSIM.Shared.Utilities;
-    using Models.Core;
-    using Models.Interfaces;
-    using Models.PMF.Interfaces;
-    using Models.Soils;
-    using Models.Soils.Nutrients;
-    using Models.Surface;
-    using StdUnits;
-    using System;
-    using System.Collections.Generic;
-    using System.Globalization;
-    using System.Linq;
 
     /// <summary>
-    /// #GrazPlan Stock
+    /// # Stock
     /// The STOCK component encapsulates the GRAZPLAN animal biology model, as described in [FREER1997].
-    /// 
+    ///
     /// [The GrazPlan animal model technical description](https://grazplan.csiro.au/wp-content/uploads/2007/08/TechPaperMay12.pdf)
-    /// 
+    ///
     /// Animals may be of different genotypes. In particular, sheep and cattle may be represented within a single STOCK instance.
-    /// 
+    ///
     /// Usually a single STOCK module is added to an AusFarm simulation, at the top level in the
     /// module hierarchy.
-    /// 
+    ///
     /// In a grazing system, however, there may be a variety of different classes of livestock. Animals
     /// may be of different genotypes (including both sheep and cattle); may be males, females or
     /// castrates; are likely to have a range of different ages; and females may be pregnant and/or
     /// lactating. The set of classes of livestock can change over time as animals enter or leave the
     /// system, are mated, give birth or are weaned. Further, animals that are otherwise similar may be
     /// placed in different paddocks, where their growth rates may differ.
-    /// 
-    /// ![Alt Text](StockGroupsExample.png)
-    /// 
-    /// **Figure [FigureNumber]:**  The list of animal groups at a particular time during a hypothetical simulation containing a
-    /// STOCK module. Group 1 is distinct from the others because it has a different genotype and sex. Groups 2
-    /// and 3 are distinct because they are in different age classes (yearling vs mature). Groups 2 and 4 are
-    /// distinct because they are in different reproductive states (pregnant vs lactating). Note how the unweaned
-    /// lambs are associated with their mothers.
-    /// 
+    ///
+    /// ![The list of animal groups at a particular time during a hypothetical simulation containing a STOCK module. Group 1 is distinct from the others because it has a different genotype and sex. Groups 2 and 3 are distinct because they are in different age classes (yearling vs mature). Groups 2 and 4 are distinct because they are in different reproductive states (pregnant vs lactating). Note how the unweaned lambs are associated with their mothers.](StockGroupsExample.png)
+    ///
     /// In the STOCK component, this complexity is handled by representing the set of animals in a
     /// simulated system as a list of animal groups (Figure 2.1). The members of each animal group
     /// have the same genotype and age class, but may have a range of ages (for example, an animal
     /// group containing mature animals may include four-year-old, five-year-old and six-year-old
     /// stock). The members of each animal group also have the same stage of pregnancy and/or
     /// lactation; the same number of suckling offspring; and occupy the same paddock.
-    /// 
+    ///
     /// The set of animal groups changes as animals enter and leave the simulation, and as
     /// physiological events such as maturation, mating, birth or weaning take place. Animal groups
     /// that become sufficiently similar are merged into a single group. The state of any unweaned
     /// lambs or calves is stored alongside that of their mothers; at weaning, the male and female
     /// weaners are transferred into two new animal groups within the main list.
-    /// 
+    ///
     /// In addition to the biological state variables that describe the animals, each animal group has
     /// four attributes that are of particular interest when writing management scripts.
-    /// 
+    ///
     /// **Index**
-    /// 
+    ///
     /// Each animal group has a unique, internally-assigned integer index, starting at 1.
     /// Because the set of groups present in a component instance is dynamic, the index
     /// number associated with a particular group of animals can – and usually does – change
     /// over time. This dynamic numbering scheme has consequences for the way that animals
     /// of a particular kind must be located when writing management scripts.
-    /// 
+    ///
     /// **Paddock**
-    /// 
+    ///
     /// Each animal group is also assigned a paddock. The forage and supplementary feed
     /// available to a group of animals are determined by the paddock it occupies. Paddocks are
     /// referred to by name in the STOCK component:
-    /// 
+    ///
     /// * To set the paddock occupied by an animal group, use the **Move** event.
     /// * To determine the paddock occupied by an animal group, use the **Paddock** variable.
-    /// 
+    ///
     /// It is the user’s responsibility to ensure that paddock names correspond to PADDOCK
     /// modules or other sources of necessary driving variables.
-    /// 
+    ///
     /// **Tag Value**
-    /// 
+    ///
     /// Each animal group also has a user-assigned tag value that takes an integer value. Tag
     /// values have two purposes:
-    /// 
+    ///
     /// * They can be used to manage distinct groups of animals in a common fashion. For
     /// example, all lactating ewes might be assigned the same tag value, and then all
     /// animals with this tag value might undergo the same supplementary feeding regime.
     /// * If tag values are assigned sequentially (starting at 1), they can be used to generate
     /// summary variables. For example, **WeightTag[1]** gives the average live weight
     /// of all animals in groups with a tag value of 1.
-    /// 
+    ///
     /// Note that animal groups with different tag values are never merged, even if they are
     /// otherwise similar.
-    /// 
+    ///
     /// * To set the tag value of an animal group, use the **Tag** method.
     /// * To determine the tag value of an animal group, use the **TagNo** variable.
-    /// 
+    ///
     ///  **Merging groups of similar animals**
-    ///  
+    ///
     /// Animal groups that become sufficiently similar are merged into a single group.
     /// Animals are similar if all these are the same:
-    /// 
+    ///
     /// * Occupy the same paddock
     /// * Reproduction status (Castrated, Male, Empty, Early Preg,  Late Preg)
     /// * Number of foetuses
@@ -111,7 +104,7 @@
     /// * Mean age (if the animals are less than one year old )
     /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.HTMLView")]
+    [ViewName("UserInterface.Views.MarkdownView")]
     [PresenterName("UserInterface.Presenters.GenericPresenter")]
     [ValidParent(ParentType = typeof(Simulation))]
     public class Stock : Model
@@ -129,7 +122,7 @@
         /// <summary>
         /// The random number host
         /// </summary>
-        public MyRandom randFactory;
+        public MyRandom randFactory = null;
 
         /// <summary>
         /// The supplement used
@@ -214,25 +207,30 @@
         #endregion
 
         #region Readable properties ====================================================
-        /// <summary>Mass of grazers per unit area</summary>
+        /// <summary>
+        /// Mass of grazers per unit area
+        /// This returns the kg/ha of all paddocks in the order stored in the Stock component.
+        /// </summary>
         [Units("kg/ha")]
-        public double Trampling
+        public double[] Trampling
         {
             get
-            {   // TODO: complete the function
+            {
+                double[] rates = new double[this.StockModel.Paddocks.Count - 1];
+                for (int idx = 1; idx <= this.StockModel.Paddocks.Count() - 1; idx++)
+                {
+                    PaddockInfo paddInfo = this.StockModel.Paddocks[idx];
+                    rates[idx - 1] = this.StockModel.ReturnMassPerArea(paddInfo.Name, "kg/ha");
+                }
 
-                ForageProvider forageProvider;
-
-                // using the component ID
-                // return the mass per area for all forages
-                forageProvider = this.StockModel.ForagesAll.FindProvider(0);
-                return this.StockModel.ReturnMassPerArea(StockModel.Paddocks[0], forageProvider, "kg/ha"); // by paddock or from forage ref
+                return rates;
             }
         }
 
         /// <summary>
         /// Gets the consumption of supplementary feed by animals
         /// </summary>
+        [Units("-")]
         public SupplementEaten[] SuppEaten
         {
             get
@@ -246,6 +244,7 @@
         /// <summary>
         /// Gets the number of animal groups
         /// </summary>
+        [Units("-")]
         public int NoGroups
         {
             get
@@ -259,6 +258,7 @@
         /// <summary>
         /// Gets the number of animals in each group
         /// </summary>
+        [Units("-")]
         public int[] Number
         {
             get
@@ -272,6 +272,7 @@
         /// <summary>
         /// Gets the total number of animals
         /// </summary>
+        [Units("-")]
         public int NumberAll
         {
             get
@@ -285,6 +286,7 @@
         /// <summary>
         /// Gets the number of animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] NumberTag
         {
             get
@@ -300,6 +302,7 @@
         /// <summary>
         /// Gets the number of unweaned young animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NumberYng
         {
             get
@@ -313,6 +316,7 @@
         /// <summary>
         /// Gets the total number of unweaned young animals
         /// </summary>
+        [Units("-")]
         public int NumberYngAll
         {
             get
@@ -326,6 +330,7 @@
         /// <summary>
         /// Gets the number of unweaned young animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NumberYngTag
         {
             get
@@ -341,6 +346,7 @@
         /// <summary>
         /// Gets the number of female animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NoFemale
         {
             get
@@ -354,6 +360,7 @@
         /// <summary>
         /// Gets the total number of female animals
         /// </summary>
+        [Units("-")]
         public int NoFemaleAll
         {
             get
@@ -367,6 +374,7 @@
         /// <summary>
         /// Gets the number of female animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] NoFemaleTag
         {
             get
@@ -382,6 +390,7 @@
         /// <summary>
         /// Gets the number of unweaned female animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NoFemaleYng
         {
             get
@@ -395,6 +404,7 @@
         /// <summary>
         /// Gets the total number of unweaned female animals
         /// </summary>
+        [Units("-")]
         public int NoFemaleYngAll
         {
             get
@@ -408,6 +418,7 @@
         /// <summary>
         /// Gets the number of unweaned female animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] NoFemaleYngTag
         {
             get
@@ -423,6 +434,7 @@
         /// <summary>
         /// Gets the number of male animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NoMale
         {
             get
@@ -436,6 +448,7 @@
         /// <summary>
         /// Gets the total number of male animals
         /// </summary>
+        [Units("-")]
         public int NoMaleAll
         {
             get
@@ -449,6 +462,7 @@
         /// <summary>
         /// Gets the number of male animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] NoMaleTag
         {
             get
@@ -464,6 +478,7 @@
         /// <summary>
         /// Gets the number of unweaned male animals in each group
         /// </summary>
+        [Units("-")]
         public int[] NoMaleYng
         {
             get
@@ -477,6 +492,7 @@
         /// <summary>
         /// Gets the total number of unweaned male animals
         /// </summary>
+        [Units("-")]
         public int NoMaleYngAll
         {
             get
@@ -490,6 +506,7 @@
         /// <summary>
         /// Gets the number of unweaned male animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] NoMaleYngTag
         {
             get
@@ -505,6 +522,7 @@
         /// <summary>
         /// Gets the deaths of all non suckling animals
         /// </summary>
+        [Units("-")]
         public int DeathsAll
         {
             get
@@ -518,6 +536,7 @@
         /// <summary>
         /// Gets the deaths of non suckling animals in each group
         /// </summary>
+        [Units("-")]
         public int[] Deaths
         {
             get
@@ -531,6 +550,7 @@
         /// <summary>
         /// Gets the deaths of non suckling animals in each tag group
         /// </summary>
+        [Units("-")]
         public int[] DeathsTag
         {
             get
@@ -542,8 +562,9 @@
         }
 
         /// <summary>
-        /// Gets the sex field of the sheep and cattle initialisation variables
+        /// Gets the sex field of the sheep and cattle initialisation variables. [wether | ram | steer | bull | ewe | heifer | cow]
         /// </summary>
+        [Units("-")]
         public string[] Sex
         {
             get
@@ -648,6 +669,7 @@
         /// <summary>
         /// Gets the age of animals, in months by group
         /// </summary>
+        [Units("month")]
         public double[] AgeMonths
         {
             get
@@ -661,6 +683,7 @@
         /// <summary>
         /// Gets the age of animals, in months total
         /// </summary>
+        [Units("month")]
         public double AgeMonthsAll
         {
             get
@@ -674,6 +697,7 @@
         /// <summary>
         /// Gets the age of animals, in months by tag number
         /// </summary>
+        [Units("month")]
         public double[] AgeMonthsTag
         {
             get
@@ -689,6 +713,7 @@
         /// <summary>
         /// Gets the age of unweaned young animals, in months by group
         /// </summary>
+        [Units("month")]
         public double[] AgeMonthsYng
         {
             get
@@ -702,6 +727,7 @@
         /// <summary>
         /// Gets the age of unweaned young animals, in months total
         /// </summary>
+        [Units("month")]
         public double AgeMonthsYngAll
         {
             get
@@ -715,6 +741,7 @@
         /// <summary>
         /// Gets the age of unweaned young animals, in months by tag number
         /// </summary>
+        [Units("month")]
         public double[] AgeMonthsYngTag
         {
             get
@@ -901,11 +928,27 @@
             }
         }
 
+        /// <summary>
+        /// Gets the fleece-free, conceptus-free, empty body weight by group
+        /// </summary>
+        [Units("kg")]
+        public double[] BaseWtEmpty
+        {
+            get
+            {
+                double[] values = new double[this.StockModel.Count()];
+                StockVars.PopulateRealValue(this.StockModel, StockProps.prpBASE_EMPTY_WT, false, false, false, ref values);
+
+                return values;
+            }
+        }       
+
         // =========== Condition score of animals ==================
 
         /// <summary>
         /// Gets the condition score of animals (1-5 scale) by group
         /// </summary>
+        [Units("-")]
         public double[] CondScore
         {
             get
@@ -919,6 +962,7 @@
         /// <summary>
         /// Gets the condition score of animals (1-5 scale) total
         /// </summary>
+        [Units("-")]
         public double CondScoreAll
         {
             get
@@ -932,6 +976,7 @@
         /// <summary>
         /// Gets the condition score of animals (1-5 scale) by tag number
         /// </summary>
+        [Units("-")]
         public double[] CondScoreTag
         {
             get
@@ -947,6 +992,7 @@
         /// <summary>
         /// Gets the condition score of unweaned young animals (1-5 scale) by group
         /// </summary>
+        [Units("-")]
         public double[] CondScoreYng
         {
             get
@@ -960,6 +1006,7 @@
         /// <summary>
         /// Gets the condition score of unweaned young animals (1-5 scale) total
         /// </summary>
+        [Units("-")]
         public double CondScoreYngAll
         {
             get
@@ -973,6 +1020,7 @@
         /// <summary>
         /// Gets the condition score of unweaned young animals (1-5 scale) by tag number
         /// </summary>
+        [Units("-")]
         public double[] CondScoreYngTag
         {
             get
@@ -1428,6 +1476,7 @@
         /// <summary>
         /// Gets the number of foetuses per head by group
         /// </summary>
+        [Units("-")]
         public double[] NoFoetuses
         {
             get
@@ -1441,6 +1490,7 @@
         /// <summary>
         /// Gets the number of foetuses per head total
         /// </summary>
+        [Units("-")]
         public double NoFoetusesAll
         {
             get
@@ -1454,6 +1504,7 @@
         /// <summary>
         /// Gets the number of foetuses per head by tag number
         /// </summary>
+        [Units("-")]
         public double[] NoFoetusesTag
         {
             get
@@ -1470,6 +1521,7 @@
         /// <summary>
         /// Gets the number of unweaned lambs or calves per head by group
         /// </summary>
+        [Units("-")]
         public double[] NoSuckling
         {
             get
@@ -1483,6 +1535,7 @@
         /// <summary>
         /// Gets the number of unweaned lambs or calves per head total
         /// </summary>
+        [Units("-")]
         public double NoSucklingAll
         {
             get
@@ -1496,6 +1549,7 @@
         /// <summary>
         /// Gets the number of unweaned lambs or calves per head by tag number
         /// </summary>
+        [Units("-")]
         public double[] NoSucklingTag
         {
             get
@@ -1511,6 +1565,7 @@
         /// <summary>
         /// Gets the condition score at last parturition; zero if lactating=0, by group
         /// </summary>
+        [Units("-")]
         public double[] BirthCS
         {
             get
@@ -1524,6 +1579,7 @@
         /// <summary>
         /// Gets the condition score at last parturition; zero if lactating=0, total
         /// </summary>
+        [Units("-")]
         public double BirthCSAll
         {
             get
@@ -1537,6 +1593,7 @@
         /// <summary>
         /// Gets the condition score at last parturition; zero if lactating=0, by tag number
         /// </summary>
+        [Units("-")]
         public double[] BirthCSTag
         {
             get
@@ -1550,11 +1607,13 @@
         /// <summary>
         /// Gets the paddock occupied by each animal group
         /// </summary>
+        [Units("-")]
         public string[] Paddock { get { return StockModel.Paddocks.Skip(1).Select(p => p.Name).ToArray(); } }
 
         /// <summary>
         /// Gets the tag value assigned to each animal group
         /// </summary>
+        [Units("-")]
         public int[] TagNo { get { return StockModel.Animals.Skip(1).Select(p => p.Tag).ToArray(); } }
 
         // =========== Dry sheep equivalents, based on potential intake ==================
@@ -1562,6 +1621,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake by group
         /// </summary>
+        [Units("-")]
         public double[] DSE
         {
             get
@@ -1575,6 +1635,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake total
         /// </summary>
+        [Units("-")]
         public double DSEAll
         {
             get
@@ -1588,6 +1649,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake by tag number
         /// </summary>
+        [Units("-")]
         public double[] DSETag
         {
             get
@@ -1603,6 +1665,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake of unweaned young animals by group
         /// </summary>
+        [Units("-")]
         public double[] DSEYng
         {
             get
@@ -1616,6 +1679,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake of unweaned young animals total
         /// </summary>
+        [Units("-")]
         public double DSEYngAll
         {
             get
@@ -1629,6 +1693,7 @@
         /// <summary>
         /// Gets the dry sheep equivalents, based on potential intake of unweaned young animals by tag number
         /// </summary>
+        [Units("-")]
         public double[] DSEYngTag
         {
             get
@@ -1733,6 +1798,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients by each animal group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] Intake
         {
             get
@@ -1746,6 +1812,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients
         /// </summary>
+        [Units("-")]
         public DMPoolHead IntakeAll
         {
             get
@@ -1759,6 +1826,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] IntakeTag
         {
             get
@@ -1774,6 +1842,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients of unweaned animals by group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] IntakeYng
         {
             get
@@ -1787,6 +1856,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients of unweaned animals
         /// </summary>
+        [Units("-")]
         public DMPoolHead IntakeYngAll
         {
             get
@@ -1800,6 +1870,7 @@
         /// <summary>
         /// Gets the total intake per head of dry matter and nutrients of unweaned animals by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] IntakeYngTag
         {
             get
@@ -1815,6 +1886,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients by each animal group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] PastIntake
         {
             get
@@ -1828,6 +1900,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients
         /// </summary>
+        [Units("-")]
         public DMPoolHead PastIntakeAll
         {
             get
@@ -1841,6 +1914,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] PastIntakeTag
         {
             get
@@ -1856,6 +1930,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients of unweaned animals by group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] PastIntakeYng
         {
             get
@@ -1869,6 +1944,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients of unweaned animals
         /// </summary>
+        [Units("-")]
         public DMPoolHead PastIntakeYngAll
         {
             get
@@ -1882,6 +1958,7 @@
         /// <summary>
         /// Gets the intake per head of pasture dry matter and nutrients of unweaned animals by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] PastIntakeYngTag
         {
             get
@@ -1897,6 +1974,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients by each animal group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] SuppIntake
         {
             get
@@ -1910,6 +1988,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients
         /// </summary>
+        [Units("-")]
         public DMPoolHead SuppIntakeAll
         {
             get
@@ -1923,6 +2002,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] SuppIntakeTag
         {
             get
@@ -1938,6 +2018,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients of unweaned animals by group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] SuppIntakeYng
         {
             get
@@ -1951,6 +2032,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients of unweaned animals
         /// </summary>
+        [Units("-")]
         public DMPoolHead SuppIntakeYngAll
         {
             get
@@ -1964,6 +2046,7 @@
         /// <summary>
         /// Gets the intake per head of supplement dry matter and nutrients of unweaned animals by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] SuppIntakeYngTag
         {
             get
@@ -2596,6 +2679,7 @@
         /// <summary>
         /// Gets the sulphur retained within the animals, on a per-head basis by group
         /// </summary>
+        [Units("kg/d")]
         public double[] RetainedS
         {
             get
@@ -2683,6 +2767,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head by each animal group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] Faeces
         {
             get
@@ -2696,6 +2781,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head
         /// </summary>
+        [Units("-")]
         public DMPoolHead FaecesAll
         {
             get
@@ -2709,6 +2795,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] FaecesTag
         {
             get
@@ -2724,6 +2811,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head of unweaned animals by group
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] FaecesYng
         {
             get
@@ -2737,6 +2825,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head of unweaned animals
         /// </summary>
+        [Units("-")]
         public DMPoolHead FaecesYngAll
         {
             get
@@ -2750,6 +2839,7 @@
         /// <summary>
         /// Gets the faecal dry matter and nutrients per head of unweaned animals by tag
         /// </summary>
+        [Units("-")]
         public DMPoolHead[] FaecesYngTag
         {
             get
@@ -2765,6 +2855,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head by each animal group
         /// </summary>
+        [Units("-")]
         public InorgFaeces[] FaecesInorg
         {
             get
@@ -2785,6 +2876,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head
         /// </summary>
+        [Units("-")]
         public InorgFaeces FaecesInorgAll
         {
             get
@@ -2792,6 +2884,7 @@
                 DMPoolHead[] pools = new DMPoolHead[1];
                 InorgFaeces[] inorgpools = new InorgFaeces[pools.Length];
                 StockVars.PopulateDMPoolValue(this.StockModel, StockProps.prpINORG_FAECES, false, true, false, ref pools);
+                inorgpools[0] = new InorgFaeces();
                 inorgpools[0].N = pools[0].N;
                 inorgpools[0].P = pools[0].P;
                 inorgpools[0].S = pools[0].S;
@@ -2802,6 +2895,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head by tag
         /// </summary>
+        [Units("-")]
         public InorgFaeces[] FaecesInorgTag
         {
             get
@@ -2824,6 +2918,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head of unweaned animals by group
         /// </summary>
+        [Units("-")]
         public InorgFaeces[] FaecesInorgYng
         {
             get
@@ -2844,6 +2939,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head of unweaned animals
         /// </summary>
+        [Units("-")]
         public InorgFaeces FaecesInorgYngAll
         {
             get
@@ -2851,6 +2947,7 @@
                 DMPoolHead[] pools = new DMPoolHead[1];
                 InorgFaeces[] inorgpools = new InorgFaeces[pools.Length];
                 StockVars.PopulateDMPoolValue(this.StockModel, StockProps.prpINORG_FAECES, true, true, false, ref pools);
+                inorgpools[0] = new InorgFaeces();
                 inorgpools[0].N = pools[0].N;
                 inorgpools[0].P = pools[0].P;
                 inorgpools[0].S = pools[0].S;
@@ -2861,6 +2958,7 @@
         /// <summary>
         /// Gets the inorganic nutrients excreted in faeces, per head of unweaned animals by tag
         /// </summary>
+        [Units("-")]
         public InorgFaeces[] FaecesInorgYngTag
         {
             get
@@ -2881,6 +2979,7 @@
         /// <summary>
         /// Gets the metabolizable energy use for each animal group
         /// </summary>
+        [Units("-")]
         public EnergyUse[] EnergyUse
         {
             get
@@ -3424,6 +3523,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) by group
         /// </summary>
+        [Units("0-1")]
         public double[] RDPFactor
         {
             get
@@ -3437,6 +3537,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) total
         /// </summary>
+        [Units("0-1")]
         public double RDPFactorAll
         {
             get
@@ -3450,6 +3551,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) by tag number
         /// </summary>
+        [Units("0-1")]
         public double[] RDPFactorTag
         {
             get
@@ -3465,6 +3567,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) of unweaned young animals by group
         /// </summary>
+        [Units("0-1")]
         public double[] RDPFactorYng
         {
             get
@@ -3478,6 +3581,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) of unweaned young animals total
         /// </summary>
+        [Units("0-1")]
         public double RDPFactorYngAll
         {
             get
@@ -3491,6 +3595,7 @@
         /// <summary>
         /// Gets the effect of rumen-degradable protein availability on rate of intake (1 = no limitation to due lack of RDP) of unweaned young animals by tag number
         /// </summary>
+        [Units("0-1")]
         public double[] RDPFactorYngTag
         {
             get
@@ -3504,8 +3609,9 @@
         // =========== Externally-imposed scaling factor for potential intake ==================
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable by group
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable by group
         /// </summary>
+        [Units("-")]
         public double[] IntakeModifier
         {
             get
@@ -3517,8 +3623,9 @@
         }
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable, total
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable, total
         /// </summary>
+        [Units("-")]
         public double IntakeModifierAll
         {
             get
@@ -3530,8 +3637,9 @@
         }
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable by tag number
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable by tag number
         /// </summary>
+        [Units("-")]
         public double[] IntakeModifierTag
         {
             get
@@ -3545,8 +3653,9 @@
         // =========== Externally-imposed scaling factor for potential intake of young ==================
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable, of unweaned young animals by group
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable, of unweaned young animals by group
         /// </summary>
+        [Units("-")]
         public double[] IntakeModifierYng
         {
             get
@@ -3558,8 +3667,9 @@
         }
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable, of unweaned young animals total
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable, of unweaned young animals total
         /// </summary>
+        [Units("-")]
         public double IntakeModifierYngAll
         {
             get
@@ -3571,8 +3681,9 @@
         }
 
         /// <summary>
-        /// Gets the externally-imposed scaling factor for potential intake. This property is resettable, of unweaned young animals by tag number
+        /// Gets the externally-imposed scaling factor for potential intake (0-1.0). This property is resettable, of unweaned young animals by tag number
         /// </summary>
+        [Units("-")]
         public double[] IntakeModifierYngTag
         {
             get
@@ -3595,7 +3706,7 @@
         [EventSubscribe("StartOfSimulation")]
         private void OnStartOfSimulation(object sender, EventArgs e)
         {
-            randFactory.Initialise(RandSeed);
+            this.randFactory.Initialise(RandSeed);
             StockModel = new StockList(this, systemClock, locWtr, paddocks);
 
             var childGenotypes = this.FindAllChildren<Genotype>().Cast<Genotype>().ToList();
@@ -3604,6 +3715,18 @@
 
             int currentDay = systemClock.Today.Day + (systemClock.Today.Month * 0x100) + (systemClock.Today.Year * 0x10000);
         }
+
+        /// <summary>
+        /// At the start of the simulation, initialise all the paddocks and forages and nitrogen returns.
+        /// </summary>
+        /// <param name="sender">The sending object</param>
+        /// <param name="e">The event arguments</param>
+        [EventSubscribe("EndOfSimulation")]
+        private void OnEndOfSimulation(object sender, EventArgs e)
+        {
+            this.randFactory = new MyRandom(RandSeed);
+        }
+
 
         /// <summary>
         /// Initialisation step
@@ -3702,18 +3825,18 @@
 
         #region Management methods ============================================
         // ............................................................................
-        // Management methods                                                         
+        // Management methods
         // ............................................................................
 
         /// <summary>
-        /// Causes a set of related age cohorts of animals to enter the simulation. 
-        /// Each age cohort may contain animals that are pregnant and/or lactating, in which case distributions of numbers of foetuses and/or suckling offspring are computed automatically. 
+        /// Causes a set of related age cohorts of animals to enter the simulation.
+        /// Each age cohort may contain animals that are pregnant and/or lactating, in which case distributions of numbers of foetuses and/or suckling offspring are computed automatically.
         /// This event is primarily intended to simplify the initialisation of flocks and herds in simulations.
         /// </summary>
         /// <param name="animals">The animal data</param>
         public void Add(StockAdd animals)
         {
-            outputSummary.WriteMessage(this, "Adding " + animals.Number.ToString() + ", " + animals.Genotype + " " + animals.Sex);
+            outputSummary.WriteMessage(this, "Adding " + animals.Number.ToString() + ", " + animals.Genotype + " " + animals.Sex, MessageType.Diagnostic);
             StockModel.Add(animals);
         }
 
@@ -3723,7 +3846,7 @@
         /// <param name="stock">The stock data</param>
         public void Buy(StockBuy stock)
         {
-            outputSummary.WriteMessage(this, "Buying " + stock.Number.ToString() + ", " + stock.Age.ToString() + " month old " + stock.Genotype + " " + stock.Sex.ToString() + " ");
+            outputSummary.WriteMessage(this, "Buying " + stock.Number.ToString() + ", " + stock.Age.ToString() + " month old " + stock.Genotype + " " + stock.Sex.ToString() + " ", MessageType.Diagnostic);
             StockModel.Buy(stock);
         }
 
@@ -3736,7 +3859,8 @@
         /// <param name="age">The age of animals (months)</param>
         /// <param name="weight">The weight of animals (kg)</param>
         /// <param name="fleeceWeight">The fleece weight of animals (kg)</param>
-        public void Buy(string genotype, double number, ReproductiveType sex, double age, double weight, double fleeceWeight)
+		/// <param name="tag">Tag number of animal groups </param>
+        public void Buy(string genotype, double number, ReproductiveType sex, double age, double weight, double fleeceWeight, int tag = 0)
         {
             StockBuy stock = new StockBuy();
             stock.Genotype = genotype;
@@ -3745,7 +3869,8 @@
             stock.Age = age;
             stock.Weight = weight;
             stock.FleeceWt = fleeceWeight;
-            outputSummary.WriteMessage(this, "Buying " + stock.Number.ToString() + ", " + stock.Age.ToString() + " month old " + stock.Genotype + " " + stock.Sex.ToString() + " ");
+            stock.UseTag = tag;
+            outputSummary.WriteMessage(this, "Buying " + stock.Number.ToString() + ", " + stock.Age.ToString() + " month old " + stock.Genotype + " " + stock.Sex.ToString() + " ", MessageType.Diagnostic);
             StockModel.Buy(stock);
         }
 
@@ -3773,7 +3898,7 @@
                 numSold = Math.Min(number, group.NoAnimals);
                 group.NoAnimals -= numSold;
             }
-            outputSummary.WriteMessage(this, $"Sold {number} animals");
+            outputSummary.WriteMessage(this, $"Sold {number} animals", MessageType.Diagnostic);
             return numSold;
         }
 
@@ -3796,7 +3921,7 @@
                 number -= numToSellFromThisGroup;
                 numSold += numToSellFromThisGroup;
             }
-            outputSummary.WriteMessage(this, $"Sold {numSold} animals");
+            outputSummary.WriteMessage(this, $"Sold {numSold} animals", MessageType.Diagnostic);
             return numSold;
         }
 
@@ -3809,7 +3934,7 @@
         /// <returns>cfw</returns>
         public double Shear(bool shearAdults, bool shearYoung, AnimalGroup group = null)
         {
-            this.outputSummary.WriteMessage(this, "Shearing animals");
+            this.outputSummary.WriteMessage(this, "Shearing animals", MessageType.Diagnostic);
             double totalCFW = 0;
             if (group == null)
             {
@@ -3827,7 +3952,7 @@
         /// <param name="group">The animal group to move.</param>
         public void Move(string paddockName, AnimalGroup group = null)
         {
-            this.outputSummary.WriteMessage(this, $"Moving animals to paddock {paddockName}");
+            this.outputSummary.WriteMessage(this, $"Moving animals to paddock {paddockName}", MessageType.Diagnostic);
             var paddockToMoveTo = StockModel.Paddocks.Find(p => p.Name.Equals(paddockName, StringComparison.InvariantCultureIgnoreCase));
             if (paddockToMoveTo == null)
                 throw new Exception($"Stock: attempt to place animals in non-existent paddock: {paddockName}");
@@ -3843,13 +3968,13 @@
         /// <summary>
         /// Commences mating of a particular group of animals.  If the animals are not empty females, or if they are too young, has no effect
         /// </summary>
-        /// <param name="mateTo">Genotype of the rams or bulls with which the animals are mated. 
+        /// <param name="mateTo">Genotype of the rams or bulls with which the animals are mated.
         /// Must match the name field of a member of the genotypes property.</param>
         /// <param name="mateDays">Length of the mating period in days.</param>
         /// <param name="group">The animal group to mate. null denotes that all empty females of sufficient age should be mated.</param>
         public void Join(string mateTo, int mateDays, AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, $"Joining animals to {mateTo}");
+            outputSummary.WriteMessage(this, $"Joining animals to {mateTo}", MessageType.Diagnostic);
 
             if (group == null)
             {
@@ -3861,16 +3986,16 @@
         }
 
         /// <summary>
-        /// Converts ram lambs to wether lambs, or bull calves to steers.  If the animal group(s) denoted by group has no suckling young, has no effect. 
-        /// If the number of male lambs or calves in a nominated group is greater than the number to be castrated, the animal group will be split; 
-        /// the sub-group with castrated offspring will remain at the original index and the sub-group with offspring that were not castrated will 
+        /// Converts ram lambs to wether lambs, or bull calves to steers.  If the animal group(s) denoted by group has no suckling young, has no effect.
+        /// If the number of male lambs or calves in a nominated group is greater than the number to be castrated, the animal group will be split;
+        /// the sub-group with castrated offspring will remain at the original index and the sub-group with offspring that were not castrated will
         /// be added at the end of the set of animal groups.
         /// </summary>
         /// <param name="number">Number of male lambs or calves to be castrated.</param>
         /// <param name="group">The animal group to castrate. null denotes that each animal group should be processed in turn until the nominated number of offspring has been castrated.</param>
         public void Castrate(int number, AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, $"Castrate {number} animals");
+            outputSummary.WriteMessage(this, $"Castrate {number} animals", MessageType.Diagnostic);
             if (group == null)
             {
                 foreach (var g in AnimalGroups)
@@ -3895,7 +4020,7 @@
         }
 
         /// <summary>
-        /// Weans some or all of the lambs or calves from an animal group. 
+        /// Weans some or all of the lambs or calves from an animal group.
         /// The newly weaned animals are added to the end of the list of animal groups, with males and females in separate groups.
         /// </summary>
         /// <param name="number">The number of lambs or calves to be weaned.</param>
@@ -3911,7 +4036,7 @@
                 msg += " males";
             else
                 msg += " females";
-            outputSummary.WriteMessage(this, msg);
+            outputSummary.WriteMessage(this, msg, MessageType.Diagnostic);
 
             if (group == null)
             {
@@ -3924,14 +4049,14 @@
 
         /// <summary>
         /// Ends lactation in cows that have already had their calves weaned.  The event has no effect on other animals.
-        /// If the number of cows in a nominated group is greater than the number to be dried off, the animal group will be split; 
+        /// If the number of cows in a nominated group is greater than the number to be dried off, the animal group will be split;
         /// the sub-group that is no longer lactating will remain at the original index and the sub-group that continues lactating will be added at the end of the set of animal groups
         /// </summary>
         /// <param name="number">Number of females for which lactation is to end.</param>
         /// <param name="group">The animal group for which lactation is to end. Null denotes that each animal group should be processed in turn until the nominated number of cows has been dried off.</param>
         public void DryOff(int number, AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, $"Drying off {number} animals.");
+            outputSummary.WriteMessage(this, $"Drying off {number} animals.", MessageType.Diagnostic);
             if (group == null)
                 StockModel.DryOff(AnimalGroups, number);
             else
@@ -3946,7 +4071,7 @@
         /// <returns>The new animal groups that were created.</returns>
         public IEnumerable<AnimalGroup> SplitByAge(int age, AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, "Split animals by age.");
+            outputSummary.WriteMessage(this, "Split animals by age.", MessageType.Diagnostic);
             if (group == null)
                 return StockModel.SplitByAge(age, AnimalGroups);
             else
@@ -3961,7 +4086,7 @@
         /// <returns>The new animal groups that were created.</returns>
         public IEnumerable<AnimalGroup> SplitByWeight(double weight, AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, "Split animals by weight.");
+            outputSummary.WriteMessage(this, "Split animals by weight.", MessageType.Diagnostic);
             if (group == null)
                 return StockModel.SplitByWeight(weight, AnimalGroups);
             else
@@ -3975,7 +4100,7 @@
         /// <returns>The new animal groups that were created.</returns>
         public IEnumerable<AnimalGroup> SplitByYoung(AnimalGroup group = null)
         {
-            outputSummary.WriteMessage(this, "Split young animals off.");
+            outputSummary.WriteMessage(this, "Split young animals off.", MessageType.Diagnostic);
             if (group == null)
                 return StockModel.SplitByYoung(AnimalGroups);
             else
@@ -3987,8 +4112,18 @@
         /// </summary>
         public void Sort()
         {
-            outputSummary.WriteMessage(this, "Sort animals by tag");
+            outputSummary.WriteMessage(this, "Sort animals by tag", MessageType.Diagnostic);
             StockModel.Sort();
+        }
+
+        /// <summary>
+        /// Get the trampling mass for the specified paddock
+        /// </summary>
+        /// <param name="paddockName">Name of the zone/paddock</param>
+        /// <returns>Rate in kg/ha</returns>
+        public double TramplingMass(string paddockName)
+        {
+            return this.StockModel.ReturnMassPerArea(paddockName, "kg/ha");
         }
 
         #endregion ============================================
@@ -4015,16 +4150,8 @@
                     {
                         if (forageProvider.ForageObj != null)
                         {
-                            foreach (IOrganDamage biomass in forageProvider.ForageObj.Organs)
-                            {
-                                if (biomass.IsAboveGround)
-                                {
-                                    if (biomass.Live.Wt > 0)
-                                    {
-                                        pastureGreen += biomass.Live.Wt;   // g/m^2
-                                    }
-                                }
-                            }
+                            pastureGreen = forageProvider.ForageObj.Material.Where(m => m.IsLive)
+                                                                            .Sum(m => m.Consumable.Wt); // g/m^2
                         }
                     }
                 }

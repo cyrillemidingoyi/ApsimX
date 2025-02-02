@@ -75,6 +75,18 @@ namespace APSIM.Shared.Utilities
                 if (System.IO.Path.VolumeSeparatorChar == '/' && data[0] == 0x7f && data[1] == 'E' && data[2] == 'L' && data[3] == 'F')
                     return CompilationMode.Native;
 
+                if (ProcessUtilities.CurrentOS.IsMac)
+                {
+                    // Check if file is a MACH-O binary.
+                    const uint magic32Bit = 0x_FE_ED_FA_CE;
+                    const uint magic64Bit = 0x_FE_ED_FA_CF;
+                    const uint magic32BitReverseEndian = 0x_CE_FA_ED_FE;
+                    const uint magic64BitReverseEndian = 0x_CF_FA_ED_FE;
+                    uint magic = UInt32FromBytes(data, 0);
+                    if (magic == magic32Bit || magic == magic64Bit || magic == magic32BitReverseEndian || magic == magic64BitReverseEndian)
+                        return CompilationMode.Native;
+                }
+
                 // Verify this is a executable/dll
                 if (UInt16FromBytes(data, 0) != 0x5a4d)
                     return CompilationMode.Invalid;
@@ -111,6 +123,63 @@ namespace APSIM.Shared.Utilities
             catch (Exception)
             {
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Opens/runs a file/URI in the default application.
+        /// </summary>
+        /// <remarks>
+        /// Due to a bug in mono, opening files/URIs with Process.Start
+        /// doesn't work correctly. The following is a workaround used
+        /// in NetworkMiner, as suggested in the bug report on mono:
+        /// https://github.com/mono/mono/issues/17204#issuecomment-697329095
+        /// </remarks>
+        /// <param name="path">File or URI to be opened.</param>
+        public static void ProcessStart(string path)
+        {
+            if (!CurrentOS.IsWindows)
+            {
+                if (path.Contains(" ") && path[0] != '\'' && path[0]!='\"')
+                {
+                    path = "\"" + path + "\"";
+                }
+
+                foreach (string app in new[] { "xdg-open", "gnome-open", "kfmclient", "open", "explorer.exe" })
+                {
+                    System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(app, path);
+                    psi.ErrorDialog = false;
+                    try
+                    {
+                        System.Diagnostics.Process.Start(psi);
+                    }
+                    catch (System.ComponentModel.Win32Exception)
+                    {
+                        continue;
+                    }
+                    break;
+                }
+            }
+            else
+            {
+                if (System.IO.File.Exists(path))
+                    System.Diagnostics.Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                else if (System.IO.Directory.Exists(path))
+                {
+                    if (path.Contains(" ") && path[0] != '\"')
+                        path = "\"" + path + "\"";
+
+                    System.Diagnostics.Process.Start("explorer.exe", path);
+                }
+                else
+                {
+                    var ps = new System.Diagnostics.ProcessStartInfo(path)
+                    {
+                        UseShellExecute = true,
+                        Verb = "open"
+                    };
+                    System.Diagnostics.Process.Start(ps);
+                }
             }
         }
 

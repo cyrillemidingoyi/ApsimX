@@ -166,6 +166,9 @@ namespace APSIM.Shared.Utilities
         /// <param name="isUnique">Is the index a primary key?</param>
         void CreateIndex(string tableName, List<string> colNames, bool isUnique);
 
+        /// <summary>Create a new table</summary>
+        void CreateTable(DataTable table);
+
         /// <summary>
         /// Drop a table from the database
         /// </summary>
@@ -178,5 +181,11 @@ namespace APSIM.Shared.Utilities
         /// <param name="value"></param>
         /// <returns></returns>
         string AsSQLString(DateTime value);
+
+        /// <summary>
+        /// Indicates that writing to the database has concluded (for the moment).
+        /// Provides a chance to clean up any buffers still in use.
+        /// </summary>
+        void EndWriting();
     }
 }

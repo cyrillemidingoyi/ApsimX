@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using Models.Core;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Filling rate is calculated from grain number, a maximum mass to be filled and the duration of the filling process.
-    /// </summary>
+    /// <summary>Filling rate is calculated from grain number, a maximum mass to be filled and the duration of the filling process.</summary>
     [Serializable]
     public class FillingRateFunction : Model, IFunction
     {
@@ -36,8 +31,5 @@ namespace Models.Functions.DemandFunctions
         {
             return (PotentialSizeIncrement.Value(arrayIndex) / FillingDuration.Value(arrayIndex)) * ThermalTime.Value(arrayIndex) * NumberFunction.Value(arrayIndex);
         }
-
     }
 }
-
-

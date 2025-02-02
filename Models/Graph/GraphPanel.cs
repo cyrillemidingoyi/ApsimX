@@ -1,13 +1,11 @@
-﻿using APSIM.Shared.Utilities;
-using Models.Core;
-using Models.Core.Run;
-using Models.Factorial;
-using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using APSIM.Shared.Graphing;
+using APSIM.Shared.Utilities;
+using Models.Core;
+using Models.Core.Run;
+using Newtonsoft.Json;
 
 namespace Models
 {
@@ -22,7 +20,7 @@ namespace Models
     [ValidParent(ParentType = typeof(Folder))]
     [ValidParent(ParentType = typeof(Simulations))]
     [ValidParent(ParentType = typeof(Zone))]
-    public class GraphPanel : Model, IPostSimulationTool, ICustomDocumentation
+    public class GraphPanel : Model, IPostSimulationTool
     {
         /// <summary>
         /// When set to anything other than default, changes the legend
@@ -114,6 +112,7 @@ namespace Models
         /// </summary>
         public override void OnCreated()
         {
+            base.OnCreated();
             if (this.FindChild<Manager>() == null)
             {
                 Manager script = new Manager();
@@ -134,17 +133,6 @@ namespace Models
         }
 
         /// <summary>
-        /// Document the graph panel.
-        /// </summary>
-        /// <param name="tags"></param>
-        /// <param name="headingLevel"></param>
-        /// <param name="indent"></param>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            
-        }
-
-        /// <summary>
         /// Hide individual graph titles?
         /// </summary>
         [Description("Hide individual graph titles?")]
@@ -160,7 +148,7 @@ namespace Models
         /// Marker Size. Defaults to MarkerSizeType.Normal.
         /// </summary>
         [Description("Marker Size")]
-        public MarkerSizeType MarkerSize { get; set; }
+        public MarkerSize MarkerSize { get; set; }
 
         /// <summary>
         /// Use same x-axis scales for all graphs?

@@ -1,18 +1,22 @@
 ﻿using System;
-using System.Collections.Generic;
-using Models.Core;
-using Newtonsoft.Json;
 using APSIM.Shared.Utilities;
+using Models.Core;
 using Models.Functions;
+using Newtonsoft.Json;
 
 namespace Models.PMF.Phen
 {
-    /// <summary> It continues until the final main-stem leaf has finished expansion.  The duration of this phase is determined by leaf appearance rate (Structure.Phyllochron) and the number of leaves produced on the mainstem (Structure.FinalLeafNumber). As such, the model parameterisation of leaf appearance and final leaf number (set in the Structure model) are important for predicting the duration of the crop correctly.</summary>
+    /// <summary>
+    /// This phase goes from the specified start stage to the specified end stage and 
+    /// it continues until the final main-stem leaf has finished expansion.
+    /// The duration of this phase is determined by leaf appearance rate (Structure.Phyllochron)
+    /// and the number of leaves produced on the mainstem (Structure.FinalLeafNumber). 
+    /// </summary>
     [Serializable]
-    [ViewName("UserInterface.Views.GridView")]
+    [ViewName("UserInterface.Views.PropertyView")]
     [PresenterName("UserInterface.Presenters.PropertyPresenter")]
     [ValidParent(ParentType = typeof(Phenology))]
-    public class LeafAppearancePhase : Model, IPhase, ICustomDocumentation
+    public class LeafAppearancePhase : Model, IPhase
     {
         // 1. Links
         //----------------------------------------------------------------------------------------------------------------
@@ -47,6 +51,10 @@ namespace Models.PMF.Phen
         /// <summary>The end</summary>
         [Models.Core.Description("End")]
         public string End { get; set; }
+
+        /// <summary>Is the phase emerged from the ground?</summary>
+        [Description("Is the phase emerged?")]
+        public bool IsEmerged { get; set; } = true;
 
         /// <summary>Return a fraction of phase complete.</summary>
         [JsonIgnore]
@@ -104,29 +112,5 @@ namespace Models.PMF.Phen
         /// <summary>Called when [simulation commencing].</summary>
         [EventSubscribe("Commencing")]
         private void OnSimulationCommencing(object sender, EventArgs e) { ResetPhase(); }
-
-        /// <summary>Writes documentation for this function by adding to the list of documentation tags.</summary>
-        public void Document(List<AutoDocumentation.ITag> tags, int headingLevel, int indent)
-        {
-            if (IncludeInDocumentation)
-            {
-                // add a heading.
-                tags.Add(new AutoDocumentation.Heading(Name + " Phase", headingLevel));
-
-                // Describe the start and end stages
-                tags.Add(new AutoDocumentation.Paragraph("This phase goes from " + Start + " to " + End + ".  ", indent));
-
-                // get description of this class.
-                AutoDocumentation.DocumentModelSummary(this, tags, headingLevel, indent, false);
-
-                // write memos.
-                foreach (IModel memo in this.FindAllChildren<Memo>())
-                    AutoDocumentation.DocumentModel(memo, tags, headingLevel + 1, indent);
-            }
-        }
     }
 }
-
-
-
-

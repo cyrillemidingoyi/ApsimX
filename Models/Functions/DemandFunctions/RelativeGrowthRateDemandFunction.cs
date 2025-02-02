@@ -1,16 +1,12 @@
 ﻿using System;
 using Models.Core;
-using Models.PMF.Phen;
 using Models.PMF;
+using Models.PMF.Phen;
 
 namespace Models.Functions.DemandFunctions
 {
-    /// <summary>
-    /// # [Name]
-    /// Relative growth rate demand function
-    /// </summary>
+    /// <summary>This function calculates DM demand beyond the start stage as the product of current organ wt (g), relative growth rate and the specified organ number.</summary>
     [Serializable]
-    [Description("This must be renamed DMDemandFunction for the source code to recoginise it!!!!  This function calculates DM demand beyond the start stage as the product of current organ wt (g), relative growth rate and the specified organ number.")]
     public class RelativeGrowthRateDemandFunction : Model, IFunction
     {
         /// <summary>The initial wt</summary>
@@ -48,7 +44,6 @@ namespace Models.Functions.DemandFunctions
             double OrganDemand = CurrentOrganWt * RelativeGrowthRate.Value(arrayIndex);
             return OrganDemand * OrganNumber.Value(arrayIndex);
         }
-
     }
 }
 
